@@ -1,0 +1,99 @@
+function [ants,eaten]=doacts(ants,acts,food,NDirections,WorldSize,ENCOST,state);
+
+% DOACTS Perform the actions in vector acts.
+%
+%        USAGE: function [ants,eaten]=doacts(ants,acts,food,NDirections,WorldSize,state); 
+
+directions=1;
+[ra,ca]=size(ants);
+tempants=ants;
+N=length(acts);
+direction=rem(floor(state/10),10);
+comm=[];
+listen=[];
+eaten=0;
+for k=1:N,
+  x=ants(1,k);
+  y=ants(2,k);
+  ac=acts(k);
+  if (ac==1),
+    % eat 1 unit of food if available. Otherwise, the competition got it first!
+    if (food(x,y)>=1),
+      ants(3,k)=ants(3,k)+1;
+      food(x,y)=food(x,y)-1;
+      eaten=eaten+1;
+    end
+  elseif (ac==2),
+    % communicate location to other ants.  Also deduct one-half extra energy point.
+    comm=[comm,k];
+    ants(3,k)=ants(3,k)-0.5;
+  elseif (ac==3),
+    % divide and procreate:
+    % one ant becomes two, each with half as much energy, rounded down to the nearest integer.  
+    % The created ant does nothing this round.  If the ant has only two energy units, both
+    % will die at the start of the next round.
+    e=floor(ants(3,k)/2);
+    ants=[ants,[x;y;e;ants(4:5,k)]];
+    ants(3,k)=e;
+  elseif (ac==4),
+    % don't do anything...this action can be significant!
+  elseif ((ac==5)|(ac==6)|(ac==7)|(ac==8)),
+    % move in some direction...not yet chosen.
+    if (ac==5),
+      % move left.
+      ants(1,k)=ants(1,k)-1;
+    elseif (ac==6),
+      % move down
+      ants(2,k)=ants(2,k)-1;
+    elseif (ac==7),
+      % move right
+      ants(1,k)=ants(1,k)+1;
+    elseif (ac==8),
+      % move up
+      disp('move 4');
+      ants(2,k)=ants(2,k)+1;
+    end
+    if (max([ants(2,k) ants(1,k)])>WorldSize)|(min([ants(2,k) ants(1,k)])<1),
+      disp('ants');
+      disp(ants);
+      disp('acts');
+      disp(acts);
+      disp('k');
+      disp(k);
+      error('size out of World bounds');
+    end
+    if(food(ants(1,k),ants(2,k))),
+      % there is food at the new location
+      ants(5,k)=2;
+    else
+      % no food here!
+      ants(5,k)=1;
+    end        
+    % note that d=0 is not processed; it is equivalent to a NOOP.
+  elseif (ac==6),
+    listen=[listen,k];
+  end
+end
+
+% perform all communications:
+if (~isempty(comm))&(~isempty(listen)),
+  % at least one ant is communicating, and at least one is listening.
+  distances=(0.001+distan(ants(:,listen),ants(:,comm))).^(-4);
+  angles=oriented(ants(:,listen),ants(:,comm));
+  % reading down a column j gives all communications issued to the ant listen(j).
+  weighted=distances.*angles;
+  if (length(comm)==1),
+    % only one ant is communicating so we handle this case differently
+    tempdir=directions;
+    directions=angles;
+  else
+    tempdir=directions;
+    directions=sum(weighted)./sum(distances);
+  end
+  temp=quantize(directions,NDirections);
+  ants(4,listen)=temp;
+end
+
+%deduct energy cost.
+ants(3,:)=ants(3,:)-ENCOST*ones(size(ants(3,:)));
+

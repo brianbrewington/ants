@@ -1,0 +1,39 @@
+function acts=pickacts(QTable,ants,Qindex,NActions,WorldSize,NEnergyStates,state);
+
+% PICKACTS Choose actions from a QTable for the artificial ant problem.
+%       This function returns the actions to be taken by the ants.
+%
+%       USAGE:  acts=pickacts(QTable,ants,Qindex,NActions,WorldSize,state);
+
+energy=floor(state/100);
+direction=rem(floor(state/10),10);
+onfood=rem(state,10);
+
+for k=1:length(state),
+  allowed=[1:NActions];
+  j=Qindex(state(k));
+  Qvec=QTable(j,:);
+  if (energy(k)==1),
+    % not enough energy left to procreate or communicate.
+    allowed(3)=0;
+    allowed(2)=0;
+  end
+  if ((onfood(k)==1)|(round(ants(3,k))==NEnergyStates)),
+    % no food here, or we have a "full tank," so we can't eat.
+    allowed(1)=0;
+  end
+  if ((direction(k)==1)&(ants(1,k)==1)),
+    allowed(5)=0;
+  end
+  if ((direction(k)==2)&(ants(2,k)==1)),
+    allowed(6)=0;
+  end
+  if ((direction(k)==3)&(ants(1,k)==WorldSize)),
+    allowed(7)=0;
+  end
+  if ((direction(k)==4)&(ants(2,k)==WorldSize)),
+    allowed(8)=0;
+  end
+  [values,acts(k)]=min(Qvec(find(allowed)));
+end
+

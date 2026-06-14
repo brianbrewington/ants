@@ -1,0 +1,35 @@
+BRIAN BREWINGTON
+6/11/96
+ANTS PROGRAM BRIANSTORMING.
+
+Rule 1:
+All state information (such as position, life units, opinion of the location of food, consumption rates, proximity necessary to discover food, etc.)
+should be purely probabilistic.  However, in the development phase, some of this information will be deterministic, to make the implementation details
+simpler.  Ant decisions will be motivated by these probabilities.  Ideally, these probabilities will be self-modifying, meaning that the ants will
+learn to make "strategic" decisions, like not immediately broadcasting the location of food, but rather consuming some food (to regain strength)
+then broadcasting with higher strength.  Unfortunately, it is not always the strategic ant which will survive!  Hopefully, the simulation will
+capture this behavior.
+
+Rule 2:
+Each ant is striving for survival of the species.  At some point, this might be changed to the survival of individuals, for an interesting twist.
+However, we expect that an ant which is concerned about its own survival (only) will not want to communicate the location of food it has found.
+
+Rule 3:
+Individuals in the species will have a number of "life units," (to be expressed as a probability of death in each discrete time step) and a rate
+of life unit consumption for all possible actions (non-deterministic state transitions).  These actions will include movement, transmission of
+information regarding the location of food, inactivity, procreation, and food consumption.
+
+Rule 4:
+Food supplies will be replenished at random locations at a random interval.
+
+Steps in program
+1. create the population (number of ants, attributes of each ant)
+2. allow the ants to move about, exploring, discovering, and communicating.  This entails:
+a.  for each ant, decide what to do…am I at a food site? If yes, then I can eat (if I am near death) or broadcast my location with some signal
+    strength.  If I am not at a food site, I wish to move towards one.  I choose a location from my probability distribution using the CDF-1 for
+    that ant’s knowledge of the food location.  That is, we integrate the probability distribution, choose a uniform, random number, and find the
+    appropriate direction in which to travel.  For a while, this will consist of a random
+    walk.
+b.  An ant needs some criteria for broadcasting food locations.  Since it is not supposed to carry any notion of explicit self-preservation (apart from the fact that its survival is essential to the continued existence of the species), it might well broadcast its location with maximum power and then cease to live.
+c.  Rather than tracking each ant’s position in an array, we might represent position with complex numbers.  This allows a near-continuous direction knowledge distribution.
+3.  Next, with knowledge of the path of the ants, we might animate the population’s behavior by showing their locations in the plane, as well as the locations of food.  Some indication of the size of a food source would be very helpful; we could also allow the size of a food source to be related to the amount of food present there.  This type of animation could be done as the program runs…determine ant directions and distances of travel, recalculate the vector of ant positions, then plot them.  

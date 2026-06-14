@@ -1,0 +1,9 @@
+# Backend dependencies. Install into a venv:
+#   python3 -m venv .venv
+#   ./.venv/bin/pip install -r requirements.txt
+#
+# torch ships with the Apple MPS (Metal) GPU backend on arm64 macs — no CUDA.
+torch>=2.4
+fastapi>=0.110
+uvicorn[standard]>=0.29
+numpy>=1.26

@@ -1,0 +1,20 @@
+NActions=6;                             % number of actions
+NAnts=80;                               % number of ants per round
+NEnergyStates=20;                       % number of energy states in QTable
+ENCOST=0.3;                             % standard energy cost per round
+GAMMA=0.75;                             % future cost discount factor
+BETAEXP=0.75;                           % exponent reducing BETA each round (high BETAEXP->slow transition from future to present cost)
+WorldSize=20;                           % side length for the world
+MaxFoodSize=100;                        % largest food size at a location
+FoodDensity=0.03;                       % probability a location has food
+paused=0;                               % simulation paused or not?                               
+ECres=0.1;                              % increment of change in ENCOST
+MASKSIZE=floor(WorldSize/2)/2;          % communication range
+BASEFOOD=1;                             % allowed food consumption if only one ant is present
+SAMEPLACE=3;                            % number of other nearby ants of which an ant is aware
+BONUS=0.5;                              % additional food consumption allowed per extra ant on a food site
+UPDATE=250;                             % number of STEPS between plot updates
+animated='off';                         % by default, the animation is turned on.
+qlearn='on';                            % determines whether the optimization is by QLearning or genetics
+graphical='on';                         % may be used in the future...
+

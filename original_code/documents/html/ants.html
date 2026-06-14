@@ -1,0 +1,108 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2//EN">
+<HTML>
+<HEAD>
+   <TITLE>Project overview:  The Communicating Ants</TITLE>
+   <META NAME="GENERATOR" CONTENT="Mozilla/3.01Gold (Win95; I) [Netscape]">
+</HEAD>
+<BODY TEXT="#FFFFFF" BGCOLOR="#000000" LINK="#FFFF00" VLINK="#FF00FF" ALINK="#FF0000">
+
+<H2>Project overview: The Communicating Ants</H2>
+
+<P><I><TT><FONT COLOR="#00FF00">Still writing this section. Stop back again
+later for more details.</FONT></TT></I> </P>
+
+<P>One of the issues we're dealing with in relation to <A HREF="http://www.cs.dartmouth.edu/~agent">mobile
+agents</A> is that of cooperation amongst agents so as to use as few resources
+as possible while obtaining the maximum possible benefit. Problems of this
+type will find application in information retrieval and a variety of other
+agent-based processes. Resource utilization would involve things such as
+the cost of sending messages and moving around a network, while benefits
+might be measured in terms of obtaining useful information from a site
+or performing some preassigned task.</P>
+
+<P>This project (the communicating ants) involves testing a number of modes
+of optimization for learning optimal behavior in a simulated environment.
+The world we use is several steps removed from being an actual network
+simulation. In our simulation, digital &quot;ants&quot; wander around a
+2-dimensional, toroidal world, looking for food. They can:<BR>
+</P>
+
+<UL>
+<LI>communicate their location </LI>
+
+<LI>listen for incoming communications </LI>
+
+<LI>eat (if on food) </LI>
+
+<LI>teleport to the location from which communication was last received
+</LI>
+
+<LI>move randomly (within a local area), or </LI>
+
+<LI>do nothing. </LI>
+</UL>
+
+<H3>Defining states for the &quot;communicating ants&quot; problem</H3>
+
+<P>In any possible simulation, the ants will choose their optimal actions
+based on their state. There are two competing objectives: we either (1)
+operate with a small state space, and optimize quickly, or (2) use a large,
+extremely precise state space and accept that we may take a long time to
+learn our optimal poilicy within each state. Therefore, our simulations
+allow a complete spectrum of options, all of which have a known number
+of states. Our problem is initially one of defining what states we are
+to consider, and second to examine how the actions and costs will affect
+our choice of actions.</P>
+
+<P>It is natural to first consider the state of a single ant. We can imagine
+our ants as having energy, quantized in some fashion. It might be as simple
+as &quot;near dead&quot; or &quot;feeling good,&quot; or perhaps an ordered
+scale from 1 to 100. The ants might also have some preference as to which
+direction they might like to travel, including whether they’d like to travel
+at all. High-cost actions will generally be avoided, especially if they
+are high cost-to-go and not just high initial cost. Other state information
+a single ant might retain is some indication of how many other ants are
+at their location, so that they can know how good a job they've done in
+cooperating (more on this later). </P>
+
+<H3>Death of the fittest</H3>
+
+<P>If we want cooperation to be possible, let alone desirable, there must
+be a way for ants that communicate to &quot;get ahead,&quot; so to speak.
+This ties in with the mode of optimization: if we optimize by genetic programming,
+there must be a way to ensure the survival of the impetus to communicate
+helpful information. If we operate on the idea that ants which do the best
+job of &quot;watching out for number 1&quot; will survive, then surely
+an ant that wastes energy telling his competitors the whereabouts of his
+food supply will not survive long enough to have children that do the same.
+Likewise, in Q-Learning, the high cost of communicating will quickly drive
+that action from the optimal policy. Either policy leaves us with &quot;rugged
+individualists&quot; that see communication as a high-cost way of killing
+oneself by attracting competition.</P>
+
+<H3>Programming altruism</H3>
+
+<P>The incorporation of communication as a beneficial action therefore
+requires that we look beyond the ant who may be considering letting his
+fellows in on the secret stockpile of food he’s found. We are not nearly
+so concerned with the ant that chose to communicate as we are with the
+population at large which benefited from the communication. In a sense,
+we should treat small groups of cooperating ants as single organisms, in
+competition with other groups. The ant groups that communicate the most
+effectively should survive better than those that don’t. In this sense,
+we may use a &quot;survival of the fittest&quot; approach, only it will
+now be the fit groups that survive rather than the fit individuals.</P>
+
+<P>The question of defining state based on a collection of individual states
+is rather like the competition within economic systems. Corporations, for
+the most part, are internally cooperative. That is, the individuals within
+an ideal corporation will do whatever is necessary to support the corporate
+goal. However, this same body is in fierce competition with other corporations.
+The other corporations may or may not be internally cooperative: that is
+their own business. The group with the better internal cooperation will
+quite possibly outperform that with greater internal resources. In this
+sense, we seek to evolve strategies for cooperation rather than strategies
+for exploitation of one’s cooperatives.</P>
+
+</BODY>
+</HTML>
