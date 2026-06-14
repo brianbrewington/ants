@@ -115,7 +115,7 @@ function Legend({ ecosystem }: { ecosystem: boolean }) {
     ["#ffe600", "eat / food"],
     ["#ff3344", "broadcast"],
     ["#ffffff", "listen"],
-    ["#ff45e0", "teleport"],
+    ["#ff45e0", "migrate"],
     ["#c77dff", "move"],
     ["#3b6bff", "rest"],
     ...(ecosystem ? ([["#46ff7a", "reproduce"]] as [string, string][])

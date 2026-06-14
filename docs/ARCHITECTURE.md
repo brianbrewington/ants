@@ -106,3 +106,22 @@ Lesson 1 is wired live it needs a small **trainer/brain-registry layer** that ow
 learner lifecycle (transition capture, reward, update cadence, reset). The
 training loop is sketched in `learning/base.py`; building that layer is Lesson 1's
 first step (deliberately out of scope for the env-only refactor).
+
+## Known limitations & deferred work
+
+Durable record of what's intentionally not done yet (raw code reviews live in the
+gitignored `docs/codereviews/`; this is the tracked summary).
+
+- **Training layer** (Lesson 1's first step): a `Trainer` + brain/learner registry
+  owning stateful-learner lifecycle (transition capture, reward, update cadence,
+  epsilon, reset/checkpoint), and a split of environment RNG from exploration RNG.
+  The `policy(env)->actions` seam covers stateless brains only.
+- **O(N²) communication**: guarded by `COMM_PAIR_CAP` but not scalable; spatial
+  binning is the real fix, due before the learned-communication lesson.
+- **CI not active**: `ci/ci.yml` exists but isn't under `.github/workflows/`
+  (pushing workflows needs a `workflow`-scoped PAT). Until then, run `pytest`
+  locally in the venv.
+- **Contract enforcement / `/ws` integration test**: TypedDicts document the seams
+  but aren't validated by a test; add a TestClient websocket frame-contract test.
+- **Multi-tab UI sync**: live-knob sliders resync on structural changes only;
+  paused frames show last-step (not frame-aggregated) metrics. Minor, single-user.

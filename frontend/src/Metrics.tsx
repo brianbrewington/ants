@@ -7,7 +7,7 @@ const ACTION_META: { name: string; aid: number; tip: string }[] = [
   { name: "eat", aid: ACTION.EAT, tip: "Consume food in the current cell (if any, and not already full)." },
   { name: "broadcast", aid: ACTION.BROADCAST, tip: "Announce your location to nearby listeners." },
   { name: "listen", aid: ACTION.LISTEN, tip: "Lock onto the nearest broadcaster as your destination." },
-  { name: "teleport", aid: ACTION.TELEPORT, tip: "Jump to the destination you last heard about." },
+  { name: "migrate", aid: ACTION.TELEPORT, tip: "Migrate to the location heard from a broadcast — the act-on-information half of communication (a mobile agent hopping to an advertised node)." },
   { name: "move", aid: ACTION.RANDMOVE, tip: "Wander a short random step." },
   { name: "nothing", aid: ACTION.NOTHING, tip: "Rest — do nothing this step." },
   { name: "reproduce", aid: ACTION.REPRODUCE, tip: "Spend energy to place an offspring in a nearby empty slot." },

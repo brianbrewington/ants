@@ -18,5 +18,7 @@ frontend/dist/
 .vscode/
 .idea/
 
-# Local agent review artifacts
+# Local agent review artifacts (raw reviews + per-cycle response bookkeeping).
+# Durable deferrals live in docs/ARCHITECTURE.md ("Known limitations & deferred work").
 docs/codereviews/
+docs/review-responses/
