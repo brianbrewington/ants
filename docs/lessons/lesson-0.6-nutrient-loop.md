@@ -64,11 +64,46 @@ the collapse.
   death refill it. That anti-phase is the loop breathing.
 - **Push `r` to 4** and compare to the same `r` in Ecosystem mode (which goes
   extinct). The nutrient world should keep cycling.
-- **Closed vs open**: at `inflow = 0` the population is capped by the fixed mass
-  budget (`nutrient/cell`); add a little inflow and watch the ceiling rise.
+- **Closed vs open** (see below): the closed loop is *hyper-stable* across `r`;
+  opening it brings the bifurcation back.
 - **Run the bifurcation sweep in nutrient mode** — the diagram should look
   different from the logistic one, especially at the high-`r` end (no absorbing
   extinction band).
+
+## Closed is *too* stable — and that's the point (and how to undo it)
+
+Run the bifurcation sweep in nutrient mode and you'll see something striking:
+a nearly **flat band across the whole `r` range** — no extinction at low `r`, no
+collapse at high `r`. That's not a bug (well, one was: nutrient growth briefly
+ignored the per-world `r`; fixed). It's the **closed loop doing its job**: total
+mass is conserved, so the carrying capacity is set by *how much mass is in the
+world*, not by `r`. `r` changes how fast food cycles, not the long-run level. Mass
+conservation is a powerful governor — it **erases the bifurcation** in exchange
+for robustness.
+
+To get the bifurcation back, **open the system** — but you need *both* a source
+and a sink, not just inflow:
+
+- `nutrient_inflow` (source, "sunlight") **alone** just accumulates mass without
+  bound → the population inflates and flattens *further*. A source with no sink is
+  not an open system, it's a leak in reverse.
+- Add `nutrient_loss` (sink, washout/decay: a fraction of food+nutrient removed
+  per step). Now mass *flows through*: steady standing level ≈ `inflow / loss`,
+  and `r` drives the dynamics around it.
+
+With a real throughflow (e.g. `inflow = 0.6`, `loss = 0.05`) the structure
+returns: low `r` → near-extinction, rising population, **high `r` → boom-bust
+oscillation** (the paradox of enrichment). Compare the two regimes:
+
+| sweep over r | closed (inflow=loss=0) | open (inflow=0.6, loss=0.05) |
+|---|---|---|
+| low r | flat, ~0.2 | near-extinction (~0.07) |
+| high r | flat, ~0.2 | boom-bust, large amplitude |
+
+So the nutrient model gives you a *dial* between two scientifically distinct
+worlds: a **conservative** one that's robust and boring across `r`, and a
+**dissipative** one that bifurcates. That dial — closed vs open — is itself a
+nice thing to teach.
 
 ## What this sets up
 
