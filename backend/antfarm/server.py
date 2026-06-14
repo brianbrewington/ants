@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .bifurcation import bifurcation_sweep
 from .config import SimConfig
+from .contracts import FrameMetrics
 from .env import AntWorld
 from .policies import make_policy
 
@@ -80,21 +81,27 @@ class Simulation:
         else:
             self.env.cfg = new_cfg  # live knobs take effect next step
 
-    def advance(self) -> dict:
+    def advance(self) -> FrameMetrics:
         """Advance steps_per_frame steps and RETURN frame metrics. Event counts
         (births/deaths/food_eaten) are summed across the frame so charts aren't
         undercounted at speed>1; state quantities come from the last step. The env
         owns world state; the server owns frame aggregation -- no mutating env."""
+        n = max(1, self.steps_per_frame)
         last = self.env.last_info
         births = deaths = 0
         eaten = 0.0
-        for _ in range(max(1, self.steps_per_frame)):
+        frac_sum: dict[str, float] = {}
+        for _ in range(n):
             last = self.env.step(self.policy(self.env))
             births += last["births"]
             deaths += last["deaths"]
             eaten += last["food_eaten"]
+            for k, v in last.items():        # action mix averaged over the frame
+                if k.startswith("frac_"):
+                    frac_sum[k] = frac_sum.get(k, 0.0) + v
         frame = {k: v for k, v in last.items() if k != "links"}
         frame.update(births=births, deaths=deaths, food_eaten=eaten)
+        frame.update({k: s / n for k, s in frac_sum.items()})
         return frame
 
 

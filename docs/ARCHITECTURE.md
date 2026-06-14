@@ -99,5 +99,10 @@ tensor or destabilize the food update.
 - `tabular.py` — `TabularQLearner`: `encode()`/`act()` implemented, `update()` is
   the Lesson-1 TODO.
 
-A finished learner is just another policy, so it drops into `Simulation.policy`
-unchanged; the training loop is documented in `learning/base.py`.
+The `policy(env) -> actions` seam is sufficient for **stateless** brains. A
+**stateful learner** (`TabularQLearner` owns a Q-table, epsilon, and needs env
+at construction + reset/checkpoint semantics) is NOT just a drop-in policy: before
+Lesson 1 is wired live it needs a small **trainer/brain-registry layer** that owns
+learner lifecycle (transition capture, reward, update cadence, reset). The
+training loop is sketched in `learning/base.py`; building that layer is Lesson 1's
+first step (deliberately out of scope for the env-only refactor).

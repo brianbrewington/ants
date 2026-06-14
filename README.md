@@ -18,14 +18,21 @@ data, untouched — the heritage this is built on.
 ```
 backend/          Python · PyTorch (Apple MPS GPU) · FastAPI + WebSocket
   antfarm/
-    config.py     all the simulation knobs (the old GUI sliders), typed
-    env.py        the vectorized, GPU-resident world  (no per-ant loops)
-    policies.py   "brains": random + heuristic for now; learned ones later
-    server.py     runs the sim server-side, streams frames to the browser
-  tests/smoke.py  correctness + speed benchmark
+    config.py     all the simulation knobs (the old GUI sliders), typed + clamped
+    env.py        the vectorized, GPU-resident world: shared mechanics + orchestration
+    regimes.py    the 3 world models as strategies (homeostatic / logistic / nutrient)
+    snapshot.py   world-0 -> JSON (presentation, kept out of the core)
+    contracts.py  typed seams (StepInfo, Observation)
+    policies.py   "brains": random + heuristic + forage; learned ones later
+    bifurcation.py parallel-worlds sweep over food growth rate r
+    server.py     runs the sim server-side, streams frames, owns frame metrics
+    learning/     RL scaffolding (Learner / rewards / TabularQLearner stub)
+  tests/          pytest: invariants, characterization goldens, regime/mask units
 frontend/         React + TypeScript + Vite · canvas renderer · live charts
-docs/lessons/     lab notes — read these alongside the code
+docs/             ARCHITECTURE.md + lessons/ (read alongside the code)
 ```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design decisions and seams.
 
 The simulation runs **on the GPU, server-side**. The browser is a thin viewer:
 it opens a WebSocket, receives ~30 world snapshots/sec, and sends back control

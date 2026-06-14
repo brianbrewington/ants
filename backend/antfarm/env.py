@@ -58,9 +58,6 @@ class AntWorld:
         # Optional per-world override of the food growth rate r, shape [n_worlds].
         # Used by the bifurcation sweep so every parallel world runs a different r.
         self.growth_rate_vec: torch.Tensor | None = None
-        # The world regime (homeostatic / logistic / nutrient) owns the
-        # mode-specific sequence; step() just orchestrates it. See regimes.py.
-        self.regime = make_regime(config)
         self.reset()
 
     # ------------------------------------------------------------------ #
@@ -68,6 +65,11 @@ class AntWorld:
     # ------------------------------------------------------------------ #
     def reset(self):
         cfg = self.cfg
+        # Rebind the regime from the current config so reset() is safe even if
+        # cfg (e.g. food_model) changed on an existing instance. The regime
+        # (homeostatic / logistic / nutrient) owns the mode-specific sequence;
+        # step() just orchestrates it. See regimes.py.
+        self.regime = make_regime(cfg)
         B, S, W = cfg.n_worlds, self.n_slots, cfg.world_size
         dev = self.device
         f32 = torch.float32

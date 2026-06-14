@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import torch
 
+from .contracts import Snapshot
 
-def to_snapshot(env) -> dict:
+
+def to_snapshot(env) -> Snapshot:
     """JSON-ready picture of world 0 — alive ants only."""
     cfg = env.cfg
     alive0 = env.alive[0].detach().to("cpu")

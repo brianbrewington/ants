@@ -19,7 +19,9 @@ export function useSim() {
   // Track the last frame so we can clear the chart history when the run restarts
   // (step counter goes backwards) or the world model changes — otherwise we'd
   // plot two different runs as one continuous, misleading series.
-  const last = useRef<{ step: number; eco: boolean }>({ step: -1, eco: false });
+  const last = useRef<{ step: number; eco: boolean; model: string }>({
+    step: -1, eco: false, model: "logistic",
+  });
 
   useEffect(() => {
     let alive = true;
@@ -46,8 +48,10 @@ export function useSim() {
         setFrame(data);
         const step = data.snapshot.metrics.step;
         const eco = data.snapshot.ecosystem;
-        const restarted = step < last.current.step || eco !== last.current.eco;
-        last.current = { step, eco };
+        const model = data.config.food_model;   // also clear on Eco<->Nutrient switch
+        const restarted =
+          step < last.current.step || eco !== last.current.eco || model !== last.current.model;
+        last.current = { step, eco, model };
         setHistory((h) => {
           const base = restarted ? [] : h;
           const next = [...base, data.snapshot.metrics];

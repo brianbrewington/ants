@@ -44,3 +44,27 @@ class Observation(TypedDict):
     energy: torch.Tensor
     heard_food: torch.Tensor
     alive: torch.Tensor
+
+
+class FrameMetrics(StepInfo, total=False):
+    """What the server streams per frame: the StepInfo fields, but with
+    births/deaths/food_eaten summed and frac_* averaged across the frame's steps,
+    and `links` dropped (it's viz, carried in the snapshot)."""
+
+
+class AntsView(TypedDict):
+    pos: list      # [[x, y], ...] alive ants in world 0
+    energy: list
+    action: list
+
+
+class Snapshot(TypedDict):
+    """World-0 picture sent to the browser (see snapshot.to_snapshot)."""
+    world_size: int
+    ants: AntsView
+    food: list      # [[x, y, amount], ...]
+    links: list     # [[[lx,ly],[sx,sy]], ...] communication links
+    metrics: dict   # StepInfo (paused) or FrameMetrics (running), set by the server
+    energy_max: float
+    max_food: float
+    ecosystem: bool
