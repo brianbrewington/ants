@@ -36,6 +36,11 @@ EAT, BROADCAST, NOTHING, TELEPORT, LISTEN, RANDMOVE, REPRODUCE = range(7)
 ACTION_NAMES = ["eat", "broadcast", "nothing", "teleport", "listen", "randmove", "reproduce"]
 N_ACTIONS = 7
 
+# Communication builds a pairwise [n_worlds, n_slots, n_slots] tensor. Above this
+# many pairs we skip it to avoid an abrupt huge allocation (MPS handles those
+# badly). A real fix at scale is spatial binning; see docs/ARCHITECTURE.md.
+COMM_PAIR_CAP = 50_000_000
+
 
 class AntWorld:
     def __init__(self, config: SimConfig):
@@ -289,10 +294,14 @@ class AntWorld:
         cfg = self.cfg
         S, W = self.n_slots, cfg.world_size
         dev = self.device
+        # Guard the O(N^2) pairwise tensor against exploding at large populations
+        # (cheap check, no GPU sync) before doing any work.
+        if not cfg.enable_comm or cfg.n_worlds * self.n_slots ** 2 > COMM_PAIR_CAP:
+            return []
         is_broadcaster = (actions == BROADCAST) & self.alive
         is_listener = (actions == LISTEN) & self.alive
-        # Skip the O(N^2) work entirely when nobody is talking/listening.
-        if not (cfg.enable_comm and bool(is_broadcaster.any()) and bool(is_listener.any())):
+        # Skip the rest when nobody is talking/listening.
+        if not (bool(is_broadcaster.any()) and bool(is_listener.any())):
             return []
 
         diff = self.pos[:, :, None, :] - self.pos[:, None, :, :]
@@ -376,8 +385,13 @@ class AntWorld:
 
     # ------------------------------------------------------------------ #
     def _empty_info(self) -> dict:
-        return {"step": 0, "population": int(self.alive.sum().item()), "food_eaten": 0.0,
-                "deaths": 0, "births": 0, "mean_energy": 0.0, "total_food": 0.0,
+        # Describe the freshly-reset world truthfully (ants start alive with energy;
+        # food may already be present), so the very first frame's metrics match it.
+        pop = int(self.alive.sum().item())
+        mean_e = float(self.energy[self.alive].mean().item()) if pop else 0.0
+        total_food = float(self.food.sum(dim=(1, 2)).mean().item())
+        return {"step": 0, "population": pop, "food_eaten": 0.0,
+                "deaths": 0, "births": 0, "mean_energy": mean_e, "total_food": total_food,
                 "frac_eat": 0.0, "frac_broadcast": 0.0, "frac_nothing": 0.0,
                 "frac_teleport": 0.0, "frac_listen": 0.0, "frac_move": 0.0,
                 "frac_reproduce": 0.0, "links": []}

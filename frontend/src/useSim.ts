@@ -16,6 +16,10 @@ export function useSim() {
   const [connected, setConnected] = useState(false);
   const [history, setHistory] = useState<Metrics[]>([]);
   const ws = useRef<WebSocket | null>(null);
+  // Track the last frame so we can clear the chart history when the run restarts
+  // (step counter goes backwards) or the world model changes — otherwise we'd
+  // plot two different runs as one continuous, misleading series.
+  const last = useRef<{ step: number; eco: boolean }>({ step: -1, eco: false });
 
   useEffect(() => {
     let alive = true;
@@ -32,11 +36,21 @@ export function useSim() {
         retry = setTimeout(connect, 1000); // auto-reconnect on backend restart
       };
       socket.onmessage = (ev) => {
-        const data = JSON.parse(ev.data) as Frame;
-        if (data.type !== "frame") return;
+        let data: Frame;
+        try {
+          data = JSON.parse(ev.data) as Frame;
+        } catch {
+          return; // ignore malformed frame; keep the connection alive
+        }
+        if (!data || data.type !== "frame") return;
         setFrame(data);
+        const step = data.snapshot.metrics.step;
+        const eco = data.snapshot.ecosystem;
+        const restarted = step < last.current.step || eco !== last.current.eco;
+        last.current = { step, eco };
         setHistory((h) => {
-          const next = [...h, data.snapshot.metrics];
+          const base = restarted ? [] : h;
+          const next = [...base, data.snapshot.metrics];
           return next.length > HISTORY ? next.slice(-HISTORY) : next;
         });
       };

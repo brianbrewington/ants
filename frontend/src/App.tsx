@@ -9,12 +9,14 @@ import type { SimConfig } from "./types";
 
 export default function App() {
   const { frame, connected, history, send } = useSim();
-  const [running, setRunning] = useState(false);
   const [speed, setSpeed] = useState(3);
 
   const config = frame?.config ?? null;
   const policy = frame?.policy ?? "heuristic";
   const snapshot = frame?.snapshot ?? null;
+  // Run state is authoritative from the server, so it stays correct across
+  // resets, mode switches, reconnects, and control from another tab.
+  const running = frame?.running ?? false;
 
   // Push the initial speed once we're connected.
   useEffect(() => {
@@ -22,13 +24,11 @@ export default function App() {
   }, [connected]);
 
   const startPause = () => {
-    const next = !running;
-    setRunning(next);
-    send({ type: next ? "start" : "pause" });
+    send({ type: running ? "pause" : "start" });
   };
 
   const reset = () => {
-    send({ type: "reset", config });
+    send({ type: "reset", config });   // backend pauses on reset
   };
 
   const onConfig = (updates: Partial<SimConfig>, structural: boolean) => {
@@ -42,7 +42,6 @@ export default function App() {
   const onMode = (eco: boolean) => {
     // Switching world model is structural -> reset with the matching preset.
     const preset = eco ? ECOSYSTEM_PRESET : HOMEOSTATIC_PRESET;
-    setRunning(false);
     send({ type: "reset", config: { ...config, ...preset } });
   };
 

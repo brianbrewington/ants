@@ -80,9 +80,19 @@ class Simulation:
             self.env.cfg = new_cfg  # live knobs take effect next step
 
     def advance(self):
+        # Aggregate event counts across the steps advanced this frame, so charts
+        # aren't undercounted at speeds > 1. State quantities (population, energy,
+        # food on grid) are correct as the final step's snapshot.
+        births = deaths = 0
+        eaten = 0.0
         for _ in range(max(1, self.steps_per_frame)):
-            actions = self.policy(self.env)
-            self.env.step(actions)
+            info = self.env.step(self.policy(self.env))
+            births += info["births"]
+            deaths += info["deaths"]
+            eaten += info["food_eaten"]
+        self.env.last_info["births"] = births
+        self.env.last_info["deaths"] = deaths
+        self.env.last_info["food_eaten"] = eaten
 
 
 SIM = Simulation()
@@ -122,31 +132,54 @@ async def bifurcation(r_min: float = 0.3, r_max: float = 3.0, n_r: int = 200,
     base = SIM.cfg.to_dict()
     if not base.get("ecosystem"):
         base.update(ECO_SWEEP_ECONOMY)  # ensure a food-limited regime, not flat
+    # Cap the sweep's world size independently of the live sim: the sweep runs
+    # n_r worlds, so a large live world_size would blow up n_r*W^2 food tensors.
+    base["world_size"] = min(int(base.get("world_size", 48)), 64)
     async with SIM_LOCK:                  # never run GPU work alongside the live step
         out = bifurcation_sweep(base, r_min=r_min, r_max=r_max,
                                 n_r=n_r, transient=transient, sample=sample)
     return JSONResponse(out)
 
 
+def _as_dict(v) -> dict:
+    """Coerce a client-supplied config payload to a dict (None / wrong type -> {})."""
+    return v if isinstance(v, dict) else {}
+
+
+def _apply_control(sim: Simulation, msg: dict) -> None:
+    t = msg.get("type")
+    if t == "start":
+        sim.running = True
+    elif t == "pause":
+        sim.running = False
+    elif t == "reset":
+        # Merge over the current config so a partial (or null) reset preserves
+        # knobs the client didn't specify, and `config: null` can't crash us.
+        merged = {**sim.cfg.to_dict(), **_as_dict(msg.get("config"))}
+        sim.reset(SimConfig.from_dict(merged))
+        sim.running = False                      # reset always pauses (authoritative)
+    elif t == "config":
+        sim.update_config(_as_dict(msg.get("config")))
+    elif t == "policy":
+        sim.set_policy(msg.get("name", "heuristic"))
+    elif t == "speed":
+        if "steps_per_frame" in msg:
+            sim.steps_per_frame = max(1, min(50, int(msg["steps_per_frame"])))
+        if "fps" in msg:
+            sim.fps = max(1, min(60, int(msg["fps"])))
+
+
 async def _handle_control(ws: WebSocket, sim: Simulation):
-    """Consume control messages from the client until it disconnects."""
+    """Consume control messages until the client disconnects. A single malformed
+    message must never tear down the stream, so each is parsed defensively."""
     while True:
         msg = await ws.receive_json()
-        t = msg.get("type")
-        if t == "start":
-            sim.running = True
-        elif t == "pause":
-            sim.running = False
-        elif t == "reset":
-            cfg = SimConfig.from_dict(msg.get("config", sim.cfg.to_dict()))
-            sim.reset(cfg)
-        elif t == "config":
-            sim.update_config(msg.get("config", {}))
-        elif t == "policy":
-            sim.set_policy(msg.get("name", "heuristic"))
-        elif t == "speed":
-            sim.steps_per_frame = int(msg.get("steps_per_frame", sim.steps_per_frame))
-            sim.fps = int(msg.get("fps", sim.fps))
+        if not isinstance(msg, dict):
+            continue
+        try:
+            _apply_control(sim, msg)
+        except (KeyError, TypeError, ValueError):
+            continue  # ignore bad control message; keep streaming
 
 
 async def _stream_frames(ws: WebSocket, sim: Simulation):
@@ -156,7 +189,7 @@ async def _stream_frames(ws: WebSocket, sim: Simulation):
             if sim.running:
                 sim.advance()
             snapshot = sim.env.snapshot()
-        await ws.send_json({"type": "frame", "snapshot": snapshot,
+        await ws.send_json({"type": "frame", "snapshot": snapshot, "running": sim.running,
                             "policy": sim.policy.name, "config": sim.cfg.to_dict()})
         await asyncio.sleep(1.0 / max(1, sim.fps))
 
@@ -165,7 +198,7 @@ async def _stream_frames(ws: WebSocket, sim: Simulation):
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     # Send an initial frame immediately so the canvas isn't blank.
-    await ws.send_json({"type": "frame", "snapshot": SIM.env.snapshot(),
+    await ws.send_json({"type": "frame", "snapshot": SIM.env.snapshot(), "running": SIM.running,
                         "policy": SIM.policy.name, "config": SIM.cfg.to_dict()})
     producer = asyncio.create_task(_stream_frames(ws, SIM))
     consumer = asyncio.create_task(_handle_control(ws, SIM))

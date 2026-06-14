@@ -25,6 +25,8 @@ export interface Snapshot {
   links: [[number, number], [number, number]][];
   metrics: Metrics;
   energy_max: number;
+  max_food: number;
+  ecosystem: boolean;
 }
 
 export interface SimConfig {
@@ -64,6 +66,7 @@ export interface BifurcationData {
 export interface Frame {
   type: "frame";
   snapshot: Snapshot;
+  running: boolean;
   policy: string;
   config: SimConfig;
 }

@@ -10,6 +10,7 @@ keeps the env code free of magic numbers.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
+from typing import ClassVar
 
 import torch
 
@@ -30,6 +31,12 @@ def pick_device(prefer: str = "auto") -> str:
 
 @dataclass
 class SimConfig:
+    # Memory ceilings (not knobs). Slot tensors ~ n_worlds*max_ants; food tensors
+    # ~ n_worlds*world_size^2. Caps chosen to keep worst-case allocations to a few
+    # hundred MB, far below the machine's RAM but safe against typos / hostile input.
+    MAX_TOTAL_SLOTS: ClassVar[int] = 10_000_000
+    MAX_TOTAL_CELLS: ClassVar[int] = 20_000_000
+
     # --- the world -------------------------------------------------------
     world_size: int = 48          # side length W of the toroidal grid
     n_ants: int = 120             # ants per world
@@ -100,6 +107,17 @@ class SimConfig:
         self.birth_cost = float(clamp(self.birth_cost, 0.0, 1.0))
         self.seed = int(self.seed)
 
+        # PRODUCT ceilings -- per-field caps don't bound the *products* that drive
+        # allocation: slot tensors scale as n_worlds*max_ants and food tensors as
+        # n_worlds*world_size^2. Without these, a "valid" payload (e.g. n_worlds
+        # =4096, max_ants=200000) survives every per-field clamp yet asks for tens
+        # of GB. We shrink the offending dimension instead of allocating it.
+        if self.n_worlds * self.max_ants > self.MAX_TOTAL_SLOTS:
+            self.n_ants = min(self.n_ants, max(1, self.MAX_TOTAL_SLOTS // self.n_worlds))
+            self.max_ants = max(self.n_ants, self.MAX_TOTAL_SLOTS // self.n_worlds)
+        if self.n_worlds * self.world_size ** 2 > self.MAX_TOTAL_CELLS:
+            self.world_size = max(2, int((self.MAX_TOTAL_CELLS // self.n_worlds) ** 0.5))
+
     # --- bookkeeping -----------------------------------------------------
     def resolved_device(self) -> str:
         return pick_device(self.device)
@@ -109,8 +127,11 @@ class SimConfig:
 
     @classmethod
     def from_dict(cls, d: dict) -> SimConfig:
-        # Only accept keys we know about; ignore anything stray from the client.
-        known = {f for f in cls.__dataclass_fields__}  # type: ignore[attr-defined]
+        # Tolerate null / wrong-type payloads (a malformed client must not crash
+        # us), and ignore any stray keys we don't recognize.
+        if not isinstance(d, dict):
+            d = {}
+        known = set(cls.__dataclass_fields__)  # type: ignore[attr-defined]
         clean = {k: v for k, v in d.items() if k in known}
         return cls(**clean)
 

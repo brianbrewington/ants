@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SimConfig } from "./types";
 
 // The reborn 1997 slider panel, now with two modes. Live (physics) knobs take
@@ -14,7 +14,7 @@ const SPECS: Spec[] = [
   { key: "food_diffusion", label: "Food diffusion  D", min: 0, max: 0.1, step: 0.005, eco: "only" },
   { key: "birth_threshold", label: "Birth threshold", min: 0.3, max: 1.0, step: 0.05, eco: "only" },
   { key: "birth_cost", label: "Birth cost", min: 0.1, max: 0.8, step: 0.05, eco: "only" },
-  { key: "max_ants", label: "Population cap", min: 500, max: 15000, step: 500, eco: "only" },
+  { key: "max_ants", label: "Population cap", min: 500, max: 6000, step: 250, eco: "only" },
   { key: "energy_max", label: "Energy capacity", min: 5, max: 80, step: 1 },
   { key: "energy_cost", label: "Energy cost / step", min: 0.05, max: 1.5, step: 0.05 },
   { key: "food_density", label: "Food density / patch frac", min: 0.005, max: 0.2, step: 0.005 },
@@ -39,14 +39,35 @@ interface Props {
 
 export function Controls(p: Props) {
   const [local, setLocal] = useState<SimConfig | null>(p.config);
-  useEffect(() => { setLocal(p.config); }, [p.config?.ecosystem]); // resync on mode change
+
+  // Resync local sliders from the server whenever the run's *structure* changes
+  // (reset, mode switch, reconnect, or a structural reset from another tab), so
+  // sliders can't drift out of sync with the actual simulation.
+  const sig = p.config
+    ? `${p.config.ecosystem}|${p.config.world_size}|${p.config.n_ants}|${p.config.max_ants}`
+    : "";
+  useEffect(() => { if (p.config) setLocal(p.config); }, [sig]);
   useEffect(() => { if (p.config && !local) setLocal(p.config); }, [p.config]);
+
   const cfg = local ?? p.config;
+  // Debounce live knobs (sliders fire many onChange events); apply structural
+  // knobs only on release so dragging doesn't trigger a storm of world rebuilds.
+  const liveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   if (!cfg) return <aside className="panel">connecting…</aside>;
 
-  const change = (key: keyof SimConfig, value: number) => {
-    setLocal({ ...cfg, [key]: value } as SimConfig);
-    p.onConfig({ [key]: value } as Partial<SimConfig>, STRUCTURAL_FIELDS.includes(key));
+  const isStructural = (key: keyof SimConfig) => STRUCTURAL_FIELDS.includes(key);
+
+  const onSlide = (key: keyof SimConfig, value: number) => {
+    setLocal({ ...cfg, [key]: value } as SimConfig);     // instant visual feedback
+    if (!isStructural(key)) {
+      clearTimeout(liveTimer.current);
+      liveTimer.current = setTimeout(
+        () => p.onConfig({ [key]: value } as Partial<SimConfig>, false), 80);
+    }
+  };
+
+  const onCommit = (key: keyof SimConfig, value: number) => {
+    if (isStructural(key)) p.onConfig({ [key]: value } as Partial<SimConfig>, true);
   };
 
   const eco = cfg.ecosystem;
@@ -102,7 +123,9 @@ export function Controls(p: Props) {
             <span className="sval">{fmt(cfg[s.key] as number)}</span>
             <input type="range" min={s.min} max={s.max} step={s.step}
                    value={cfg[s.key] as number}
-                   onChange={(e) => change(s.key, Number(e.target.value))} />
+                   onChange={(e) => onSlide(s.key, Number(e.target.value))}
+                   onPointerUp={(e) => onCommit(s.key, Number(e.currentTarget.value))}
+                   onKeyUp={(e) => onCommit(s.key, Number(e.currentTarget.value))} />
           </label>
         ))}
         <div className="hint">Ant count &amp; world size restart the world; the rest apply live.</div>

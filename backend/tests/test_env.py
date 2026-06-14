@@ -4,10 +4,12 @@ These pin down the properties that are easy to break and hard to eyeball:
 food conservation, the torus, death/respawn semantics, and the cleverest piece
 of code in the env -- the vectorized reproduction slot assignment.
 """
+import math
+
 import torch
 
 from antfarm import AntWorld, SimConfig, make_policy
-from antfarm.env import EAT, REPRODUCE
+from antfarm.env import BROADCAST, COMM_PAIR_CAP, EAT, LISTEN, REPRODUCE
 
 
 def _homeo(**kw):
@@ -118,6 +120,17 @@ def test_seed_is_actually_reproducible():
     assert torch.equal(a.energy, b.energy)
     assert torch.equal(a.food, b.food)
     assert torch.equal(a.alive, b.alive)
+
+
+def test_comm_skipped_above_pair_cap():
+    # A population large enough to blow up the [B,S,S] comm tensor must skip the
+    # O(N^2) path entirely (no giant allocation, no links), not crash.
+    s = math.isqrt(COMM_PAIR_CAP) + 50          # n_worlds(1) * s^2 just over the cap
+    env = AntWorld(SimConfig(device="cpu", ecosystem=True, n_ants=s, max_ants=s, world_size=16))
+    acts = torch.full((1, env.n_slots), BROADCAST)
+    acts[0, ::2] = LISTEN                        # ensure both talkers and listeners exist
+    info = env.step(acts)
+    assert info["links"] == []
 
 
 def test_action_fractions_sum_to_one():

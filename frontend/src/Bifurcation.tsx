@@ -107,7 +107,8 @@ export function Bifurcation() {
         Each column is one parallel world with a different food growth rate <b>r</b>.
         Thin band → stable. Wide / split band → boom-bust oscillation &amp; chaos.
         Far left → extinction. If a band looks suspiciously thin, raise <b>settle</b> &amp;
-        <b> sample</b> to be sure it has truly converged.
+        <b> sample</b> to be sure it has truly converged. The live view pauses for the
+        few seconds the sweep runs.
         {info && <span style={{ color: "#7cffcb" }}> · {info}</span>}
         {err && <span style={{ color: "#ff6b81" }}> · {err}</span>}
       </div>

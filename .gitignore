@@ -17,3 +17,6 @@ frontend/dist/
 .DS_Store
 .vscode/
 .idea/
+
+# Local agent review artifacts
+docs/codereviews/

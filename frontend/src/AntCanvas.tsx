@@ -34,9 +34,11 @@ export function AntCanvas({ snapshot }: { snapshot: Snapshot | null }) {
       ctx.stroke();
     }
 
-    // Food: amber squares, brighter/bigger with more food.
+    // Food: amber squares, brighter/bigger with more food. Scale by the world's
+    // actual per-cell capacity (differs a lot between homeostatic and ecosystem).
+    const fmax = snapshot.max_food || 60;
     for (const [fx, fy, amt] of snapshot.food) {
-      const a = Math.min(1, amt / 60);
+      const a = Math.min(1, amt / fmax);
       const size = s * (0.4 + 0.6 * a);
       ctx.fillStyle = `rgba(255,210,60,${0.25 + 0.6 * a})`;
       ctx.fillRect((fx + 0.5) * s - size / 2, (fy + 0.5) * s - size / 2, size, size);

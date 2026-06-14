@@ -28,6 +28,22 @@ def test_rate_ranges():
     assert c.energy_cost >= 0.0
 
 
+def test_product_memory_ceilings():
+    # Hostile but per-field-valid combo: each field passes its own clamp, yet the
+    # products would allocate tens of GB. The product ceilings must shrink them.
+    c = SimConfig.from_dict(dict(n_worlds=4096, n_ants=200_000, max_ants=200_000,
+                                 world_size=1024, device="cpu"))
+    assert c.n_worlds * c.max_ants <= SimConfig.MAX_TOTAL_SLOTS
+    assert c.n_worlds * c.world_size ** 2 <= SimConfig.MAX_TOTAL_CELLS
+    assert c.n_ants <= c.max_ants and c.n_ants >= 1 and c.world_size >= 2
+
+
+def test_from_dict_handles_non_dict():
+    # null / wrong-type config payloads must not crash construction.
+    assert SimConfig.from_dict(None).world_size >= 2
+    assert SimConfig.from_dict("nonsense").world_size >= 2
+
+
 def test_from_dict_ignores_unknown_keys():
     c = SimConfig.from_dict(dict(world_size=32, bogus_key=123, device="cpu"))
     assert c.world_size == 32
