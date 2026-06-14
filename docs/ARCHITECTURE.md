@@ -20,12 +20,15 @@ messages. This mirrors the 1997 MATLAB GUI but decouples display from compute.
 | File | Responsibility |
 |------|----------------|
 | `config.py` | `SimConfig` dataclass — every knob, plus `__post_init__` validation/clamping. |
-| `env.py` | `AntWorld` — the vectorized world (both homeostatic & ecosystem modes). |
+| `env.py` | `AntWorld` — the vectorized world: shared mechanics (eat/move/comm/reproduce) + orchestration. |
+| `regimes.py` | The three world models as strategies (Homeostatic / Logistic / Nutrient). |
+| `snapshot.py` | World-0 → JSON serialization (presentation, kept out of the core). |
+| `contracts.py` | Typed seams: `StepInfo`, `Observation`. |
 | `policies.py` | Hand-written brains: `Random`, `Heuristic`, `Forage`. Contract: `policy(env) -> actions`. |
 | `bifurcation.py` | Parallel-worlds sweep over food growth rate `r` → bifurcation data. |
-| `server.py` | FastAPI app: `/ws` stream, `/api/config`, `/api/bifurcation`; the GPU lock. |
+| `server.py` | FastAPI app: `/ws` stream, `/api/config`, `/api/bifurcation`; the GPU lock; frame-metric aggregation. |
 | `learning/` | RL scaffolding for the upcoming lessons (stubs — see below). |
-| `tests/` | `pytest` invariants + `smoke.py` perf/manual check. |
+| `tests/` (`backend/tests/`) | `pytest` invariants, characterization goldens, regime/mask unit tests + `smoke.py`. |
 
 ### Core data model — the batch layout
 Every ant attribute is a tensor shaped `[n_worlds, n_slots]` (or `…, 2` for
@@ -52,10 +55,20 @@ vectorized GPU ops.
   so food is conserved exactly (`test_eat_does_not_create_energy`).
 - **`light=True` step.** Skips per-step GPU→CPU metric syncs; used by the sweep
   so it runs in seconds instead of a minute.
-- **Two food models.** Homeostatic (Lesson 0): refill to a target density,
-  instant respawn — population pinned. Ecosystem (Lesson 0.5): logistic growth
-  (rate `r`) with **diffusion off** and discrete spore rain, so food stays patchy
-  and scarce; free population.
+- **Three world regimes, as strategies** (`regimes.py`). `step()`/`reset()` are
+  pure orchestration; each regime owns its reset / metabolism / births-deaths /
+  food-growth sequence:
+  - **Homeostatic** (Lesson 0): food refills to a target, dead ants respawn —
+    population pinned.
+  - **Logistic** (Lesson 0.5): logistic food (rate `r`), diffusion off, spore
+    rain; free population (boom-bust, extinction, collapse).
+  - **Nutrient** (Lesson 0.6): food grows from a conserved nutrient pool;
+    metabolism/death return mass to the soil. Closed (`inflow=loss=0`) conserves
+    `N+F+energy`; open (`inflow>0` + `loss>0`) is dissipative and re-bifurcates.
+- **Metrics ownership.** `env.step()` returns per-step `StepInfo`; the **server**
+  sums event counts across a frame (`Simulation.advance`) and owns the frame
+  metrics — the env is never mutated for streaming. Legal-action masking is a
+  separate surface (`env.action_mask()`), an input for future learners.
 
 ### Input safety
 `SimConfig.__post_init__` clamps every field (sizes capped to prevent OOM;

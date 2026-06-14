@@ -37,3 +37,14 @@ def test_unknown_message_is_ignored():
     before = sim.cfg.to_dict()
     _apply_control(sim, {"type": "nonsense"})
     assert sim.cfg.to_dict() == before
+
+
+def test_advance_returns_frame_metrics_without_mutating_env():
+    sim = _sim()
+    sim.steps_per_frame = 5
+    n0 = sim.env.step_count
+    frame = sim.advance()
+    assert sim.env.step_count == n0 + 5                 # advanced the right number of steps
+    assert {"births", "deaths", "food_eaten", "population"} <= set(frame)
+    # frame event counts are sums over the 5 steps, so >= the env's last single step
+    assert frame["deaths"] >= sim.env.last_info["deaths"]

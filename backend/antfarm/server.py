@@ -32,7 +32,8 @@ app.add_middleware(
 )
 
 # Params that can't change without re-allocating tensors -> require a reset.
-STRUCTURAL = {"world_size", "n_ants", "n_worlds", "device", "seed", "ecosystem", "max_ants"}
+STRUCTURAL = {"world_size", "n_ants", "n_worlds", "device", "seed", "ecosystem",
+              "max_ants", "food_model"}
 
 # A known-good food/energy economy for the bifurcation sweep, used when the live
 # sim isn't currently in ecosystem mode (otherwise the sweep inherits homeostatic
@@ -79,20 +80,22 @@ class Simulation:
         else:
             self.env.cfg = new_cfg  # live knobs take effect next step
 
-    def advance(self):
-        # Aggregate event counts across the steps advanced this frame, so charts
-        # aren't undercounted at speeds > 1. State quantities (population, energy,
-        # food on grid) are correct as the final step's snapshot.
+    def advance(self) -> dict:
+        """Advance steps_per_frame steps and RETURN frame metrics. Event counts
+        (births/deaths/food_eaten) are summed across the frame so charts aren't
+        undercounted at speed>1; state quantities come from the last step. The env
+        owns world state; the server owns frame aggregation -- no mutating env."""
+        last = self.env.last_info
         births = deaths = 0
         eaten = 0.0
         for _ in range(max(1, self.steps_per_frame)):
-            info = self.env.step(self.policy(self.env))
-            births += info["births"]
-            deaths += info["deaths"]
-            eaten += info["food_eaten"]
-        self.env.last_info["births"] = births
-        self.env.last_info["deaths"] = deaths
-        self.env.last_info["food_eaten"] = eaten
+            last = self.env.step(self.policy(self.env))
+            births += last["births"]
+            deaths += last["deaths"]
+            eaten += last["food_eaten"]
+        frame = {k: v for k, v in last.items() if k != "links"}
+        frame.update(births=births, deaths=deaths, food_eaten=eaten)
+        return frame
 
 
 SIM = Simulation()
@@ -118,10 +121,9 @@ async def bifurcation(r_min: float = 0.3, r_max: float = 3.0, n_r: int = 200,
     Declared async and run directly on the event-loop thread *on purpose*: a sync
     endpoint would be dispatched to a FastAPI worker thread, and PyTorch's MPS
     backend must be driven from the thread that initialized it. The sweep is only
-    a few seconds, so briefly blocking the loop (pausing the live stream) is fine.
-    REVIEW-NOTE 2026-06-14 (deferred): blocking is intentional (single-thread MPS
-    safety). A background job would reintroduce the cross-thread-MPS segfault we
-    fixed. See docs/review-responses/2026-06-14-gpt-5.5.md.
+    a few seconds, so briefly blocking the loop (pausing the live stream) is fine
+    and intentional -- a background job would reintroduce the cross-thread MPS
+    segfault that single-threading avoids.
     It inherits the current sim's food/energy knobs; the sweep raises the slot cap
     internally so FOOD, not the cap, limits the population."""
     # Clamp every knob: the sweep allocates [n_r, max_ants] tensors and runs
@@ -193,9 +195,10 @@ async def _stream_frames(ws: WebSocket, sim: Simulation):
     """Advance the sim and push snapshots at the target frame rate."""
     while True:
         async with SIM_LOCK:                 # serialize all GPU access (see SIM_LOCK)
-            if sim.running:
-                sim.advance()
+            frame_metrics = sim.advance() if sim.running else None
             snapshot = sim.env.snapshot()
+        if frame_metrics is not None:
+            snapshot["metrics"] = frame_metrics   # frame-aggregated, server-owned
         await ws.send_json({"type": "frame", "snapshot": snapshot, "running": sim.running,
                             "policy": sim.policy.name, "config": sim.cfg.to_dict()})
         await asyncio.sleep(1.0 / max(1, sim.fps))

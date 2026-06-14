@@ -94,8 +94,6 @@ POLICIES = {p.name: p for p in [RandomPolicy, HeuristicPolicy, ForagePolicy]}
 
 
 def make_policy(name: str):
-    # REVIEW-NOTE 2026-06-14 (deferred): unknown names silently fall back to the
-    # heuristic. Acceptable because the frontend only sends valid names; if we add
-    # a public API we should reject unknown policies instead. See
-    # docs/review-responses/2026-06-14-gpt-5.5.md.
+    # Unknown names fall back to the heuristic (the frontend only sends valid
+    # names). A public API should reject unknown policies instead.
     return POLICIES.get(name, HeuristicPolicy)()

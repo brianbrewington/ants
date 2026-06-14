@@ -31,6 +31,7 @@ from __future__ import annotations
 import torch
 
 from .config import SimConfig
+from .contracts import Observation, StepInfo
 from .regimes import make_regime
 from .snapshot import to_snapshot
 
@@ -40,10 +41,8 @@ N_ACTIONS = 7
 
 # Communication builds a pairwise [n_worlds, n_slots, n_slots] tensor. Above this
 # many pairs we skip it to avoid an abrupt huge allocation (MPS handles those
-# badly).
-# REVIEW-NOTE 2026-06-14 (deferred): this CAP is a guard, not the real fix. Proper
-# spatial binning (only check nearby ants) lands with Lesson 0.6 when populations
-# scale up. See docs/review-responses/2026-06-14-gpt-5.5.md.
+# badly). This is a guard, not the scalable fix — spatial binning (only check
+# nearby ants) is the real solution when populations grow large.
 COMM_PAIR_CAP = 50_000_000
 
 
@@ -250,7 +249,9 @@ class AntWorld:
         b = torch.arange(self.cfg.n_worlds, device=self.device)[:, None]
         return self.food[b, cx, cy]
 
-    def observe(self) -> dict:
+    def observe(self) -> Observation:
+        # The core per-ant observation. action_mask() is a separate surface so we
+        # don't compute it for hand policies that ignore it (learners call both).
         return {
             "on_food": (self._food_at_ant() > 0).float(),
             "energy": self.energy,
@@ -258,10 +259,39 @@ class AntWorld:
             "alive": self.alive,
         }
 
+    def action_mask(self) -> torch.Tensor:
+        """Which actions are legal per ant, [n_worlds, n_slots, N_ACTIONS] (bool).
+
+        Ports the spirit of the original legal.m: an RL policy should not waste
+        probability mass on actions that do nothing. EAT needs food underfoot and
+        room to eat; REPRODUCE needs an ecosystem and an eligible (well-fed) ant;
+        dead slots may only do NOTHING. (step() still no-ops illegal actions, so
+        this is purely an input for learners -- it does not change dynamics.)"""
+        cfg = self.cfg
+        B, S = cfg.n_worlds, self.n_slots
+        mask = torch.ones(B, S, N_ACTIONS, dtype=torch.bool, device=self.device)
+
+        on_food = self._food_at_ant() > 0
+        has_room = self.energy < cfg.energy_max - 1e-6
+        mask[..., EAT] = on_food & has_room
+
+        if cfg.ecosystem:
+            eligible = self.energy >= cfg.birth_threshold * cfg.energy_max
+            mask[..., REPRODUCE] = eligible
+        else:
+            mask[..., REPRODUCE] = False        # reproduction is inert when pinned
+
+        # dead slots: only NOTHING is legal
+        dead = ~self.alive
+        if bool(dead.any()):
+            mask[dead] = False
+            mask[..., NOTHING] = mask[..., NOTHING] | dead
+        return mask
+
     # ------------------------------------------------------------------ #
     # Step
     # ------------------------------------------------------------------ #
-    def step(self, actions: torch.Tensor, light: bool = False) -> dict:
+    def step(self, actions: torch.Tensor, light: bool = False) -> StepInfo | dict:
         """Advance one tick. `light=True` skips all metric/CPU syncs (used by the
         bifurcation sweep where we only read population, occasionally) -- this is
         the difference between a sluggish sweep and a fast one on MPS."""

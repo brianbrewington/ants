@@ -29,9 +29,8 @@ def survival_food_reward(env: AntWorld, prev_energy: torch.Tensor,
         env.step(actions)
         r = survival_food_reward(env, prev_e, prev_a)
     """
-    # REVIEW-NOTE 2026-06-14 (deferred): correct dead/empty-slot masking requires
-    # the caller to pass prev_alive. This is an RL stub; the training loop in
-    # Lesson 1 will always pass it. See docs/review-responses/2026-06-14-gpt-5.5.md.
+    # Correct dead/empty-slot masking requires the caller to pass prev_alive; the
+    # Lesson 1 training loop always will (this is an RL stub).
     reward = food_weight * (env.energy - prev_energy) - step_cost
     if prev_alive is not None:
         died = prev_alive & (~env.alive)
