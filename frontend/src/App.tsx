@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSim } from "./useSim";
 import { AntCanvas } from "./AntCanvas";
 import { Controls } from "./Controls";
 import { MetricsPanel } from "./Metrics";
 import { Bifurcation } from "./Bifurcation";
+import { LearnerPanel } from "./LearnerPanel";
 import { HOMEOSTATIC_PRESET, ECOSYSTEM_PRESET, NUTRIENT_PRESET } from "./presets";
 import type { SimConfig, WorldModel } from "./types";
 
@@ -28,6 +29,16 @@ export default function App() {
   // Run state is authoritative from the server, so it stays correct across
   // resets, mode switches, reconnects, and control from another tab.
   const running = frame?.running ?? false;
+  const learner = frame?.learner ?? null;
+
+  // Short rolling histories of the learner's exploration rate and reward, for the
+  // little sparklines in the learner panel.
+  const epsHist = useRef<number[]>([]);
+  const rewHist = useRef<number[]>([]);
+  if (learner) {
+    epsHist.current = [...epsHist.current, learner.epsilon].slice(-120);
+    rewHist.current = [...rewHist.current, learner.reward].slice(-120);
+  }
 
   // Push the initial speed once we're connected.
   useEffect(() => {
@@ -101,6 +112,15 @@ export default function App() {
         <section className="stage">
           <AntCanvas snapshot={snapshot} />
           <Legend ecosystem={!!config?.ecosystem} />
+          {learner && (
+            <LearnerPanel
+              learner={learner}
+              epsHistory={epsHist.current}
+              rewardHistory={rewHist.current}
+              onToggleLearning={() => send({ type: "learning", on: !learner.learning })}
+              onReset={() => send({ type: "reset_learner" })}
+            />
+          )}
           {config?.ecosystem && <Bifurcation />}
         </section>
 

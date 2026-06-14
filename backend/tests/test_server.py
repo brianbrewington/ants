@@ -39,6 +39,40 @@ def test_unknown_message_is_ignored():
     assert sim.cfg.to_dict() == before
 
 
+def test_tabular_q_brain_learns_and_streams_telemetry():
+    sim = _sim()
+    sim.set_brain("tabular_q")
+    assert sim.learner is not None
+    eps0 = sim.learner.epsilon
+    sim.steps_per_frame = 10
+    sim.advance()                                  # learns online
+    tel = sim.learner_telemetry()
+    assert tel is not None
+    assert len(tel["q_table"]) == sim.learner.n_states
+    assert len(tel["q_table"][0]) == 7
+    assert sim.learner.epsilon < eps0              # exploration decayed -> it learned
+
+    sim.learning = False                           # freeze
+    eps_frozen = sim.learner.epsilon
+    sim.advance()
+    assert sim.learner.epsilon == eps_frozen       # frozen: no updates, no decay
+
+    sim.set_brain("heuristic")                     # switching away drops the learner
+    assert sim.learner is None
+    assert sim.learner_telemetry() is None
+
+
+def test_learner_q_preserved_across_nonstructural_reset():
+    sim = _sim()
+    sim.set_brain("tabular_q")
+    sim.steps_per_frame = 10
+    sim.advance()
+    q_before = sim.learner.Q.clone()
+    sim.reset(sim.cfg)                              # same shape -> keep what it learned
+    assert sim.learner is not None
+    assert sim.learner.Q.shape == q_before.shape
+
+
 def test_advance_returns_frame_metrics_without_mutating_env():
     sim = _sim()
     sim.steps_per_frame = 5

@@ -113,10 +113,16 @@ export function Controls(p: Props) {
       <div className="group">
         <div className="group-title">Brain</div>
         <div className="row seg">
-          {["heuristic", "random"].map((name) => (
+          {["heuristic", "random", "tabular_q"].map((name) => (
             <button key={name} className={"seg-btn" + (p.policy === name ? " active" : "")}
-                    onClick={() => p.onPolicy(name)}>{name}</button>
+                    onClick={() => p.onPolicy(name)}>
+              {name === "tabular_q" ? "tabular Q" : name}
+            </button>
           ))}
+        </div>
+        <div className="hint">
+          tabular Q learns live — watch its Q-table fill in below the world.
+          Best paired with the Homeostatic world (deaths keep teaching it).
         </div>
       </div>
 

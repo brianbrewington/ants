@@ -123,6 +123,21 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 4px; }
   border-radius: 7px; padding: 5px 7px; font-variant-numeric: tabular-nums;
 }
 
+/* Learner panel + Q-table heatmap */
+.learner {
+  width: 100%; max-width: 680px; margin-top: 6px;
+  background: linear-gradient(180deg, var(--panel) 0%, #0b0e1a 100%);
+  border: 1px solid var(--line); border-radius: 14px; padding: 14px;
+}
+.learner-stats { display: flex; gap: 24px; margin: 10px 0 12px; flex-wrap: wrap; }
+.lstat { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+.qtable { display: grid; gap: 2px; align-items: center; }
+.qcorner { height: 14px; }
+.qhead { font-size: 9px; color: var(--muted); text-align: center; text-transform: uppercase; letter-spacing: 0.3px; }
+.qrowlabel { font-size: 9px; color: var(--muted); text-align: right; padding-right: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.qcell { height: 13px; border-radius: 2px; border: 1px solid transparent; cursor: help; }
+.qcell.qbest { border-color: rgba(255,255,255,0.85); box-shadow: 0 0 4px rgba(255,255,255,0.35); }
+
 @media (max-width: 1080px) {
   .layout { grid-template-columns: 1fr; }
 }

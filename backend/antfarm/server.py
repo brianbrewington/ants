@@ -24,7 +24,8 @@ from fastapi.staticfiles import StaticFiles
 from .bifurcation import bifurcation_sweep
 from .config import SimConfig
 from .contracts import FrameMetrics
-from .env import AntWorld
+from .env import ACTION_NAMES, AntWorld
+from .learning import TabularQLearner, survival_food_reward
 from .policies import make_policy
 
 app = FastAPI(title="Communicating Ants")
@@ -48,23 +49,66 @@ ECO_SWEEP_ECONOMY = {
 
 
 class Simulation:
-    """Holds the one live world + the loop knobs. One per server process."""
+    """Holds the one live world + the loop knobs. One per server process.
+
+    The "brain" is either a stateless hand policy (heuristic/random/forage) or a
+    stateful learner (tabular_q). The learner has a lifecycle: it's bound to the
+    env, learns online as the sim runs (when `learning` is on), and its Q-table is
+    preserved across non-structural resets but rebuilt when the world's shape
+    changes. (This is the trainer/registry seam the architecture review flagged.)
+    """
 
     def __init__(self):
         self.cfg = SimConfig()
         self.env = AntWorld(self.cfg)
-        self.policy = make_policy("heuristic")
         self.running = False
         self.steps_per_frame = 1   # env steps advanced between streamed frames
         self.fps = 30
+        self.brain = "heuristic"
+        self.policy = make_policy("heuristic")
+        self.learner: TabularQLearner | None = None
+        self.learning = True       # learner: learn (True) vs freeze/eval (False)
+        self.last_reward = 0.0     # telemetry: mean reward over the last frame
 
     def reset(self, cfg: SimConfig | None = None):
         if cfg is not None:
             self.cfg = cfg
         self.env = AntWorld(self.cfg)
+        if self.learner is not None:                       # rebind learner to new env
+            self._make_learner(preserve=True)
 
-    def set_policy(self, name: str):
-        self.policy = make_policy(name)
+    def set_brain(self, name: str):
+        self.brain = name
+        if name == "tabular_q":
+            self._make_learner(preserve=self.learner is not None)
+        else:
+            self.learner = None
+            self.policy = make_policy(name)
+
+    def _make_learner(self, preserve: bool):
+        prev_q = self.learner.Q if (preserve and self.learner is not None) else None
+        self.learner = TabularQLearner(self.env)
+        if prev_q is not None and prev_q.shape == self.learner.Q.shape:
+            self.learner.Q = prev_q.to(self.learner.device)   # keep what it learned
+
+    def reset_learner(self):
+        if self.learner is not None:
+            self._make_learner(preserve=False)             # wipe the Q-table, start fresh
+
+    def learner_telemetry(self) -> dict | None:
+        """Small enough to stream every frame: the whole Q-table (states x actions),
+        labels, exploration rate, and recent reward -- the learner's whole mind."""
+        if self.learner is None:
+            return None
+        actions = [("migrate" if a == "teleport" else a) for a in ACTION_NAMES]
+        return {
+            "q_table": self.learner.Q.detach().to("cpu").tolist(),
+            "states": self.learner.state_labels(),
+            "actions": actions,
+            "epsilon": float(self.learner.epsilon),
+            "reward": self.last_reward,
+            "learning": self.learning,
+        }
 
     def update_config(self, updates: dict):
         """Apply knob changes. Structural ones rebuild the world; the rest are
@@ -90,19 +134,41 @@ class Simulation:
         last = self.env.last_info
         births = deaths = 0
         eaten = 0.0
+        reward_sum = 0.0
         frac_sum: dict[str, float] = {}
         for _ in range(n):
-            last = self.env.step(self.policy(self.env))
+            if self.learner is not None:
+                last = self._learner_step()
+                reward_sum += self.last_reward
+            else:
+                last = self.env.step(self.policy(self.env))
             births += last["births"]
             deaths += last["deaths"]
             eaten += last["food_eaten"]
             for k, v in last.items():        # action mix averaged over the frame
                 if k.startswith("frac_"):
                     frac_sum[k] = frac_sum.get(k, 0.0) + v
+        if self.learner is not None:
+            self.last_reward = reward_sum / n
         frame = {k: v for k, v in last.items() if k != "links"}
         frame.update(births=births, deaths=deaths, food_eaten=eaten)
         frame.update({k: s / n for k, s in frac_sum.items()})
         return frame
+
+    def _learner_step(self) -> dict:
+        """One live learning step: act (explore unless frozen), full env.step (we
+        need metrics for the viz), then learn from the transition. Mirrors
+        learning/trainer.py but keeps metrics + reward telemetry."""
+        env, learner = self.env, self.learner
+        s1 = learner.encode(env)
+        actions = learner.act(env, greedy=not self.learning)
+        prev_energy = env.energy.clone()
+        info = env.step(actions)                       # full step (metrics for the UI)
+        if self.learning:
+            reward = survival_food_reward(env, prev_energy, env.last_died)
+            learner.update(s1, actions, reward, learner.encode(env), env)
+            self.last_reward = float(reward.mean().item())
+        return info
 
 
 SIM = Simulation()
@@ -177,7 +243,11 @@ def _apply_control(sim: Simulation, msg: dict) -> None:
     elif t == "config":
         sim.update_config(_as_dict(msg.get("config")))
     elif t == "policy":
-        sim.set_policy(msg.get("name", "heuristic"))
+        sim.set_brain(msg.get("name", "heuristic"))
+    elif t == "learning":                        # learner: learn vs freeze/eval
+        sim.learning = bool(msg.get("on", True))
+    elif t == "reset_learner":
+        sim.reset_learner()
     elif t == "speed":
         if "steps_per_frame" in msg:
             sim.steps_per_frame = max(1, min(50, int(msg["steps_per_frame"])))
@@ -207,7 +277,8 @@ async def _stream_frames(ws: WebSocket, sim: Simulation):
         if frame_metrics is not None:
             snapshot["metrics"] = frame_metrics   # frame-aggregated, server-owned
         await ws.send_json({"type": "frame", "snapshot": snapshot, "running": sim.running,
-                            "policy": sim.policy.name, "config": sim.cfg.to_dict()})
+                            "policy": sim.brain, "learner": sim.learner_telemetry(),
+                            "config": sim.cfg.to_dict()})
         await asyncio.sleep(1.0 / max(1, sim.fps))
 
 
@@ -216,7 +287,8 @@ async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     # Send an initial frame immediately so the canvas isn't blank.
     await ws.send_json({"type": "frame", "snapshot": SIM.env.snapshot(), "running": SIM.running,
-                        "policy": SIM.policy.name, "config": SIM.cfg.to_dict()})
+                        "policy": SIM.brain, "learner": SIM.learner_telemetry(),
+                        "config": SIM.cfg.to_dict()})
     producer = asyncio.create_task(_stream_frames(ws, SIM))
     consumer = asyncio.create_task(_handle_control(ws, SIM))
     try:

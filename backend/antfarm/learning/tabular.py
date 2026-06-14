@@ -40,6 +40,15 @@ class TabularQLearner(Learner):
         self.n_states = n_energy_bins * 2 * 2
         self.Q = torch.zeros(self.n_states, N_ACTIONS, device=self.device)
 
+    def state_labels(self) -> list[str]:
+        """Human-readable label per state row, matching `encode`'s layout:
+        state = (energy_bin*2 + on_food)*2 + heard_food."""
+        labels = []
+        for i in range(self.n_states):
+            ebin, onfood, heard = i // 4, (i // 2) % 2, i % 2
+            labels.append(f"E{ebin} {'food' if onfood else '—'} {'heard' if heard else '—'}")
+        return labels
+
     def encode(self, env: AntWorld) -> torch.Tensor:
         obs = env.observe()
         ebin = (obs["energy"] / env.cfg.energy_max * self.n_energy_bins).long()
@@ -48,20 +57,23 @@ class TabularQLearner(Learner):
         heard = (obs["heard_food"] > 0).long()
         return (ebin * 2 + onfood) * 2 + heard            # [n_worlds, n_slots]
 
-    def act(self, env: AntWorld) -> torch.Tensor:
+    def act(self, env: AntWorld, greedy: bool = False) -> torch.Tensor:
         state = self.encode(env)
         q = self.Q[state]                                  # [B, S, A]
         mask = env.action_mask()                           # [B, S, A] bool
         neg = torch.finfo(q.dtype).min
 
         # greedy: best LEGAL action
-        greedy = torch.where(mask, q, torch.full_like(q, neg)).argmax(dim=-1)
+        best = torch.where(mask, q, torch.full_like(q, neg)).argmax(dim=-1)
         # explore: a uniform random LEGAL action (argmax of masked noise; uses the
         # env generator so runs stay reproducible)
         noise = torch.rand(q.shape, device=self.device, generator=env.gen)
         rand_legal = torch.where(mask, noise, torch.full_like(noise, -1.0)).argmax(dim=-1)
         explore = torch.rand(state.shape, device=self.device, generator=env.gen) < self.epsilon
-        return torch.where(explore, rand_legal, greedy)
+        if greedy:
+            explore = torch.zeros_like(explore)            # frozen/eval: no exploration
+        self.last_explore = explore                        # for the viz (who's exploring)
+        return torch.where(explore, rand_legal, best)
 
     def update(self, s1: torch.Tensor, actions: torch.Tensor, reward: torch.Tensor,
                s2: torch.Tensor, env: AntWorld) -> None:

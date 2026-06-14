@@ -67,6 +67,27 @@ Yes — trained over 64 worlds, then evaluated greedily against a random baselin
 hungry, and to stop squandering itself. (`test_learning.py` pins both the update
 arithmetic and that learning beats random.)
 
+## Watch it learn (in the browser)
+
+Pick the **tabular Q** brain (Homeostatic world is clearest — respawns keep the
+death signal flowing) and hit Start. A **Q-table heatmap** appears under the
+world: one row per state, one column per action, colour = how good the learner
+currently thinks that action is there (green good, red bad). You're watching its
+mind form in real time.
+
+What to look for:
+- The table starts grey (all zeros) and **differentiates** within seconds.
+- In "**on food**" rows, the **eat** column goes green and gets the ring (the ring
+  = the action it would pick). In "not on food" rows, eat is never legal so it
+  stays neutral and the policy points elsewhere.
+- Low-energy states pick up **red** where actions tend to lead to death — that's
+  the death penalty propagating backward through the Bellman update.
+- The **ε (exploration)** sparkline decays — it explores boldly at first, then
+  exploits what it learned. The **reward** sparkline drifts up.
+- Hit **freeze** to stop learning and watch the *pure learned policy* act (no
+  exploration); **reset brain** wipes the table so you can watch it learn from
+  scratch again.
+
 ## What's still weak — and what it sets up
 
 The state is coarse: `(energy bin) × (on food?) × (heard food?)` — 40 states. The

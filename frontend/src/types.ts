@@ -74,11 +74,21 @@ export interface BifurcationData {
   n_slots: number;
 }
 
+export interface LearnerTelemetry {
+  q_table: number[][]; // [state][action] = Q value
+  states: string[]; // row labels
+  actions: string[]; // column labels
+  epsilon: number; // exploration rate (decays)
+  reward: number; // mean reward last frame
+  learning: boolean; // learning vs frozen/eval
+}
+
 export interface Frame {
   type: "frame";
   snapshot: Snapshot;
   running: boolean;
   policy: string;
+  learner: LearnerTelemetry | null;
   config: SimConfig;
 }
 
