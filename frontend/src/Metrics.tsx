@@ -46,7 +46,8 @@ function Spark({ data, color, label, fmt }: {
   );
 }
 
-export function MetricsPanel({ history, ecosystem }: { history: Metrics[]; ecosystem: boolean }) {
+export function MetricsPanel({ history, ecosystem, mode }:
+  { history: Metrics[]; ecosystem: boolean; mode: string }) {
   const col = (k: keyof Metrics) => history.map((m) => m[k] as number);
   const m = history.length ? history[history.length - 1] : null;
 
@@ -79,6 +80,10 @@ export function MetricsPanel({ history, ecosystem }: { history: Metrics[]; ecosy
                fmt={(v) => v.toFixed(0)} />
         <Spark data={col("total_food")} color="#ffb347" label="Food on grid"
                fmt={(v) => v.toFixed(0)} />
+        {mode === "nutrient" && (
+          <Spark data={col("total_nutrient")} color="#8a6f4e" label="Nutrient in soil"
+                 fmt={(v) => v.toFixed(0)} />
+        )}
       </div>
 
       <div className="actionbars">

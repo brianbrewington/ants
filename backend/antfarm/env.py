@@ -86,14 +86,24 @@ class AntWorld:
         # can add later; deterministic start makes the homeostatic demo legible.
         self.energy[self.alive] = cfg.energy_max
 
-        # Food --------------------------------------------------------
+        # Food (+ nutrient substrate for the closed-loop model) -------
         self.food = torch.zeros(B, W, W, device=dev, dtype=f32)
-        if cfg.ecosystem:
-            # Sparse food PATCHES, not a carpet: seed only a small fraction of
-            # cells (food_density) at a high level. With diffusion off, empty
-            # cells stay empty (logistic growth can't start from 0), so food
-            # remains localized -- something to find and worth communicating.
-            # Spore rain (food_seed) reseeds new patches over time.
+        self.nutrient = torch.zeros(B, W, W, device=dev, dtype=f32)
+        if cfg.ecosystem and cfg.food_model == "nutrient":
+            # Most of the world's mass starts in the nutrient pool; food germinates
+            # out of it. (Lesson 0.6 — see _grow_food_nutrient.) But seed some
+            # initial food patches up front (drawn FROM the nutrient, so mass is
+            # still conserved) -- otherwise the starting population starves before
+            # germination can build food up from zero.
+            self.nutrient = torch.full((B, W, W), cfg.nutrient_init, device=dev, dtype=f32)
+            seed = (torch.rand(B, W, W, device=dev, generator=g) < cfg.food_density).float()
+            sprout = seed * 0.5 * self.nutrient
+            self.food = sprout
+            self.nutrient = self.nutrient - sprout
+        elif cfg.ecosystem:
+            # Sparse food PATCHES, not a carpet (Lesson 0.5): seed only a small
+            # fraction of cells; with diffusion off, empty cells stay empty so
+            # food stays localized. Spore rain reseeds new patches over time.
             seed = (torch.rand(B, W, W, device=dev, generator=g) < cfg.food_density).float()
             self.food = seed * (0.5 + 0.5 * torch.rand(B, W, W, device=dev, generator=g)) * cfg.max_food_size
         else:
@@ -170,6 +180,63 @@ class AntWorld:
         self.food = F.clamp_(min=0.0, max=4.0 * K)
 
     # ------------------------------------------------------------------ #
+    # Food: closed nutrient loop (Lesson 0.6)
+    # ------------------------------------------------------------------ #
+    def _deposit_nutrient(self, amount: torch.Tensor):
+        """Return per-ant `amount` [n_worlds, n_slots] of mass to the nutrient
+        grid at each ant's cell (used by metabolism and death)."""
+        B, W = self.cfg.n_worlds, self.cfg.world_size
+        cx, cy = self._cells()
+        flat = torch.arange(B, device=self.device)[:, None] * (W * W) + cx * W + cy
+        self.nutrient.view(-1).scatter_add_(0, flat.reshape(-1), amount.reshape(-1))
+
+    def _grow_food_nutrient(self):
+        """Grow food OUT OF the nutrient pool instead of from a hard carrying
+        capacity. Two consequences vs the logistic model:
+
+          * No hard cap on a food pile -- growth is throttled by how much nutrient
+            is locally left (Monod term N/(N+h)), which falls as food accumulates.
+          * A zeroed cell is NOT absorbing: stochastic germination sprouts food
+            from the nutrient beneath it (a mass-conserving replacement for spore
+            rain). So food can always recolonize while nutrient remains.
+
+        With nutrient_inflow=0 every term just moves mass N<->F, so N+F is
+        conserved (and, with metabolism/death returning to N, so is N+F+energy).
+        """
+        cfg = self.cfg
+        B, W = cfg.n_worlds, cfg.world_size
+        N, F = self.nutrient, self.food
+
+        # 1. growth on existing food, Monod-limited by local nutrient, drawn from N
+        grow = torch.minimum(cfg.food_growth_rate * F * (N / (N + cfg.half_sat)), N)
+        F = F + grow
+        N = N - grow
+
+        # 2. stochastic germination: a few random cells convert local nutrient into
+        #    a fresh food patch (lets F restart from 0; keeps food patchy).
+        if cfg.germination > 0:
+            n = max(1, int(cfg.germination * W))
+            b_idx = torch.arange(B, device=self.device).repeat_interleave(n)
+            xs = torch.randint(0, W, (B * n,), device=self.device, generator=self.gen)
+            ys = torch.randint(0, W, (B * n,), device=self.device, generator=self.gen)
+            sprout = 0.5 * N[b_idx, xs, ys]                 # half the local nutrient germinates
+            N.index_put_((b_idx, xs, ys), -sprout, accumulate=True)
+            F.index_put_((b_idx, xs, ys), sprout, accumulate=True)
+
+        # 3. nutrient diffusion (mass-conserving), reusing the diffusion knob
+        if cfg.food_diffusion > 0:
+            neigh = (torch.roll(N, 1, 1) + torch.roll(N, -1, 1)
+                     + torch.roll(N, 1, 2) + torch.roll(N, -1, 2)) * 0.25
+            N = N + cfg.food_diffusion * (neigh - N)
+
+        # 4. external nutrient inflow ("sunlight"); >0 makes the system OPEN
+        if cfg.nutrient_inflow > 0:
+            N = N + cfg.nutrient_inflow
+
+        self.nutrient = N.clamp_(min=0.0)
+        self.food = F.clamp_(min=0.0)
+
+    # ------------------------------------------------------------------ #
     # Observation (the future RL input). Computed over all slots; the policy
     # may produce actions for dead slots, but step() forces them to NOTHING.
     # ------------------------------------------------------------------ #
@@ -239,16 +306,35 @@ class AntWorld:
         on_food = (self._food_at_ant() > 0)
         links = self._communicate(actions, on_food)
 
+        nutrient_mode = cfg.ecosystem and cfg.food_model == "nutrient"
+
         # --- METABOLISM (alive only) ----------------------------------
-        self.energy = torch.where(self.alive, self.energy - cfg.energy_cost, self.energy)
+        if nutrient_mode:
+            # Burn at most what the ant has, and return that mass to the nutrient
+            # pool at its cell (closed loop -> mass conserved).
+            avail = self.energy.clamp(min=0.0)
+            burn = torch.where(self.alive,
+                               torch.minimum(torch.full_like(avail, cfg.energy_cost), avail),
+                               torch.zeros_like(avail))
+            self._deposit_nutrient(burn)
+            self.energy = self.energy - burn
+        else:
+            self.energy = torch.where(self.alive, self.energy - cfg.energy_cost, self.energy)
 
         # --- BIRTHS & DEATHS ------------------------------------------
         if cfg.ecosystem:
             n_born = self._reproduce(actions, light=light)
-            dead = self.alive & (self.energy <= 0)
+            dead = self.alive & (self.energy <= 1e-6)
+            if nutrient_mode:
+                # any body mass left at death returns to the soil (carcass)
+                self._deposit_nutrient(torch.where(dead, self.energy.clamp(min=0.0),
+                                                   torch.zeros_like(self.energy)))
             self.alive[dead] = False           # boolean-mask assign: no CPU sync
             self.energy[dead] = 0.0
-            self._grow_food()
+            if nutrient_mode:
+                self._grow_food_nutrient()
+            else:
+                self._grow_food()
             n_dead = 0 if light else int(dead.sum().item())
         else:
             n_born = 0
@@ -274,6 +360,7 @@ class AntWorld:
             "births": n_born,
             "mean_energy": float(self.energy[self.alive].mean().item()) if population else 0.0,
             "total_food": float(self.food.sum(dim=(1, 2)).mean().item()),
+            "total_nutrient": float(self.nutrient.sum(dim=(1, 2)).mean().item()),
             "frac_eat": self._frac(actions, EAT),
             "frac_broadcast": self._frac(actions, BROADCAST),
             "frac_nothing": self._frac(actions, NOTHING),
@@ -393,8 +480,10 @@ class AntWorld:
         pop = int(self.alive.sum().item())
         mean_e = float(self.energy[self.alive].mean().item()) if pop else 0.0
         total_food = float(self.food.sum(dim=(1, 2)).mean().item())
+        total_nutrient = float(self.nutrient.sum(dim=(1, 2)).mean().item())
         return {"step": 0, "population": pop, "food_eaten": 0.0,
                 "deaths": 0, "births": 0, "mean_energy": mean_e, "total_food": total_food,
+                "total_nutrient": total_nutrient,
                 "frac_eat": 0.0, "frac_broadcast": 0.0, "frac_nothing": 0.0,
                 "frac_teleport": 0.0, "frac_listen": 0.0, "frac_move": 0.0,
                 "frac_reproduce": 0.0, "links": []}

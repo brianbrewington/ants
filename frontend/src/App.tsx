@@ -4,8 +4,19 @@ import { AntCanvas } from "./AntCanvas";
 import { Controls } from "./Controls";
 import { MetricsPanel } from "./Metrics";
 import { Bifurcation } from "./Bifurcation";
-import { HOMEOSTATIC_PRESET, ECOSYSTEM_PRESET } from "./presets";
-import type { SimConfig } from "./types";
+import { HOMEOSTATIC_PRESET, ECOSYSTEM_PRESET, NUTRIENT_PRESET } from "./presets";
+import type { SimConfig, WorldModel } from "./types";
+
+const PRESETS: Record<WorldModel, Partial<SimConfig>> = {
+  homeostatic: HOMEOSTATIC_PRESET,
+  ecosystem: ECOSYSTEM_PRESET,
+  nutrient: NUTRIENT_PRESET,
+};
+
+function worldModel(config: SimConfig | null): WorldModel {
+  if (!config?.ecosystem) return "homeostatic";
+  return config.food_model === "nutrient" ? "nutrient" : "ecosystem";
+}
 
 export default function App() {
   const { frame, connected, history, send } = useSim();
@@ -39,10 +50,9 @@ export default function App() {
     }
   };
 
-  const onMode = (eco: boolean) => {
+  const onMode = (model: WorldModel) => {
     // Switching world model is structural -> reset with the matching preset.
-    const preset = eco ? ECOSYSTEM_PRESET : HOMEOSTATIC_PRESET;
-    send({ type: "reset", config: { ...config, ...preset } });
+    send({ type: "reset", config: { ...config, ...PRESETS[model] } });
   };
 
   const onSpeed = (n: number) => {
@@ -51,6 +61,12 @@ export default function App() {
   };
 
   const step = snapshot?.metrics.step ?? 0;
+  const mode = worldModel(config);
+  const SUBTITLE: Record<WorldModel, string> = {
+    homeostatic: "Lesson 0 — The World · a vectorized, GPU-resident revival",
+    ecosystem: "Lesson 0.5 — A Living Ecosystem · renewable food, free population, bifurcations",
+    nutrient: "Lesson 0.6 — Closed Nutrient Loop · food grows from a conserved substrate",
+  };
 
   return (
     <div className="app">
@@ -59,11 +75,7 @@ export default function App() {
           <span className="logo">🐜</span>
           <div>
             <h1>Communicating Ants</h1>
-            <div className="subtitle">
-              {config?.ecosystem
-                ? "Lesson 0.5 — A Living Ecosystem · renewable food, free population, bifurcations"
-                : "Lesson 0 — The World · a vectorized, GPU-resident revival"}
-            </div>
+            <div className="subtitle">{SUBTITLE[mode]}</div>
           </div>
         </div>
         <div className={"status " + (connected ? "ok" : "bad")}>
@@ -74,6 +86,7 @@ export default function App() {
       <main className="layout">
         <Controls
           config={config}
+          mode={mode}
           running={running}
           policy={policy}
           speed={speed}
@@ -91,7 +104,7 @@ export default function App() {
           {config?.ecosystem && <Bifurcation />}
         </section>
 
-        <MetricsPanel history={history} ecosystem={!!config?.ecosystem} />
+        <MetricsPanel history={history} ecosystem={!!config?.ecosystem} mode={mode} />
       </main>
     </div>
   );

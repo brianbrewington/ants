@@ -64,11 +64,25 @@ class SimConfig:
     ecosystem: bool = False
     max_ants: int = 1200          # slot capacity for births (tensor size in eco mode)
     food_growth_rate: float = 1.9  # r -- logistic regrowth rate; THE bifurcation knob
-    food_diffusion: float = 0.08   # D -- how fast food spreads to neighbour cells
+    food_diffusion: float = 0.08   # D -- how fast food (or nutrient) spreads to neighbours
     food_seed: float = 0.02        # spore-rain so grazed-out / extinct food can recover
     birth_threshold: float = 0.80  # fraction of energy_max needed to reproduce
     birth_cost: float = 0.45       # fraction of energy_max handed to each offspring
     enable_comm: bool = True       # turn off the O(N^2) comm step (e.g. for sweeps)
+
+    # --- Lesson 0.6: closed nutrient loop (only used when ecosystem=True) -----
+    # "logistic": food self-limits at a hard per-cell K and a zeroed cell is an
+    #   absorbing state (Lesson 0.5).
+    # "nutrient": food grows out of a conserved nutrient substrate N. No hard cap
+    #   (food is bounded by available nutrient); a zeroed cell GERMINATES again
+    #   from the nutrient beneath it (not absorbing); ants return mass to N as they
+    #   metabolize and die. With nutrient_inflow=0 total mass (N+F+energy) is
+    #   conserved -- a real, testable invariant.
+    food_model: str = "logistic"
+    nutrient_init: float = 14.0    # starting nutrient mass per cell (sets the mass budget)
+    germination: float = 0.02      # spontaneous N->F rate (lets food restart from F=0)
+    half_sat: float = 3.0          # Monod half-saturation: N at which growth is half-max
+    nutrient_inflow: float = 0.0   # external nutrient added per cell per step (0 = closed)
 
     # --- simulation control ---------------------------------------------
     seed: int = 0
@@ -106,6 +120,14 @@ class SimConfig:
         self.birth_threshold = float(clamp(self.birth_threshold, 0.0, 1.0))
         self.birth_cost = float(clamp(self.birth_cost, 0.0, 1.0))
         self.seed = int(self.seed)
+
+        # nutrient-loop params
+        if self.food_model not in ("logistic", "nutrient"):
+            self.food_model = "logistic"
+        self.nutrient_init = float(clamp(self.nutrient_init, 0.0, 1e6))
+        self.germination = float(clamp(self.germination, 0.0, 1.0))
+        self.half_sat = float(clamp(self.half_sat, 1e-3, 1e6))
+        self.nutrient_inflow = float(clamp(self.nutrient_inflow, 0.0, 1e6))
 
         # PRODUCT ceilings -- per-field caps don't bound the *products* that drive
         # allocation: slot tensors scale as n_worlds*max_ants and food tensors as

@@ -9,6 +9,7 @@ export interface Metrics {
   births: number;
   mean_energy: number;
   total_food: number;
+  total_nutrient: number;
   frac_eat: number;
   frac_broadcast: number;
   frac_nothing: number;
@@ -49,9 +50,17 @@ export interface SimConfig {
   birth_threshold: number;
   birth_cost: number;
   enable_comm: boolean;
+  // nutrient loop (Lesson 0.6)
+  food_model: "logistic" | "nutrient";
+  nutrient_init: number;
+  germination: number;
+  half_sat: number;
+  nutrient_inflow: number;
   seed: number;
   device: string;
 }
+
+export type WorldModel = "homeostatic" | "ecosystem" | "nutrient";
 
 export interface BifurcationData {
   r: number[];

@@ -98,12 +98,13 @@ non-obvious design decisions (slot pool, the MPS lock, food conservation), and
 |---|-------|----------------|
 | 0 | [The World](docs/lessons/lesson-0-the-world.md) | The vectorized env + viz. No learning — the substrate. |
 | 0.5 | [A Living Ecosystem](docs/lessons/lesson-0.5-ecology.md) | Renewable (logistic) food + free population → stability, boom-bust, extinction, and a live **bifurcation diagram** from parallel worlds. |
+| 0.6 | [Closed Nutrient Loop](docs/lessons/lesson-0.6-nutrient-loop.md) | Food grows from a **conserved nutrient pool** (no hard cap, zeroed cells regrow, ants fertilize the soil). Mass-conserving; high-`r` cycles where logistic went extinct. |
 | 1 | Tabular Q-learning | State, action, reward, the Bellman update — the original method, done right. |
 | 2 | Deep Q (DQN) | Function approximation; reproduce the original "communication dies" failure. |
 | 3 | The altruism fix | Team rewards + credit assignment (CTDE) so cooperation can pay. |
 | 4 | Learned communication | Differentiable messages — let the ants invent what to say. |
 
-You are here: **Lesson 0.5**. Toggle **World model → Ecosystem** in the UI.
+You are here: **Lesson 0.6**. Toggle **World model → Nutrient** in the UI.
 
 ## Credits
 

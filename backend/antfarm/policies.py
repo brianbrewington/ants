@@ -57,10 +57,11 @@ class HeuristicPolicy:
         act = torch.where(on_food & (r < self.p_broadcast),
                           torch.full_like(act, BROADCAST), act)
 
-        # well-fed AND not currently on food -> reproduce (eating takes priority
-        # when standing on food, only meaningful in ecosystem mode).
+        # well-fed -> reproduce (overrides eating; a full ant gains little from
+        # more food). birth_threshold should sit comfortably above birth_cost so
+        # the parent survives the split. Only meaningful in ecosystem modes.
         if env.cfg.ecosystem:
-            full = (energy >= env.cfg.birth_threshold * env.cfg.energy_max) & (~on_food)
+            full = energy >= env.cfg.birth_threshold * env.cfg.energy_max
             act = torch.where(full & (r < self.p_reproduce),
                               torch.full_like(act, REPRODUCE), act)
         return act
