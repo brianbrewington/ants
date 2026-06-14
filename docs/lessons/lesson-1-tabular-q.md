@@ -1,50 +1,79 @@
-# Lesson 1 — Tabular Q-learning  (UPCOMING)
+# Lesson 1 — Tabular Q-learning
 
-> Status: **planned**. The scaffold exists in `backend/antfarm/learning/` —
-> `TabularQLearner.encode()` and `.act()` are written; `.update()` is the TODO we
-> fill in this lesson. This file is the plan, not yet the finished write-up.
+> Goal: replace the hand-written brain with one that *learns*, using the original
+> project's actual method — a Q-table — done correctly, and fixing the one thing
+> the 1996 reward was missing: **a reason not to die.**
 
-## Goal
+## The idea, in plain words
 
-Replace the hand-written brain with one that *learns*, using the original
-project's actual method — a Q-table — but done correctly. By the end, the learned
-policy should visibly beat the heuristic baseline on the live charts, and we'll
-have introduced the core RL vocabulary: **state, action, reward, value, the
-Bellman update, exploration**.
+Keep a table: for every *state* an ant can be in, and every *action* it could
+take, store a number — "how good is doing this here?" That's `Q[state, action]`.
+Acting is then easy: look up the row for your state, do the action with the
+highest number (most of the time).
 
-## The one thing the 1997 version got wrong
+Learning is the interesting part. After you act and see what happened, you nudge
+that number toward what experience says it *should* have been — the **Bellman
+target**:
 
-The original reward only rewarded eating; **dying cost nothing**. So ants learned
-to nibble when food was under them but had no pressure to *survive*. We fix that
-with `survival_food_reward` (already stubbed): reward = energy gained, with a big
-negative on death. That single change is the lesson's headline.
+```
+target  = reward_you_just_got  +  γ · (best Q value available in the next state)
+Q[s,a] += lr · (target − Q[s,a])
+```
 
-## Plan
+In English: *the value of acting now is the reward you just got, plus the
+discounted value of the best thing you can do next.* Repeat over millions of
+transitions and the table fills in with genuine foresight. This is Q-learning
+(Watkins, 1989) — exactly what your `qupdate.m` did. Ours just runs it over every
+ant in every parallel world at once (`learning/tabular.py:update`), and only ever
+picks **legal** actions (the `action_mask` from Lesson 0.5's refactor).
 
-1. **State** (`encode`, done): discretize each ant into
-   `(energy bin) × (on food?) × (heard food?)` — compact and legible, the spirit
-   of the original `getstate.m`.
-2. **Action**: the same 7-action set; epsilon-greedy selection (`act`, done).
-3. **Reward**: `survival_food_reward` (done).
-4. **Update** (the TODO): vectorized Q-learning over the whole `[n_worlds,
-   n_slots]` batch at once:
-   ```
-   target = reward + γ · max_a' Q[s2, a']
-   Q[s1, a] += lr · (target − Q[s1, a])
-   ```
-   Use scatter/index_put_; mask out dead slots; decay epsilon over time.
-5. **Wire it in**: register the learner as a selectable "brain" in the server so
-   you can watch it learn live, and add a "learning on/off" + epsilon readout.
+## The fix: dying has to cost something
 
-## What to watch
+The 1996 reward only rewarded eating. So a learned policy had every reason to
+nibble and none to *survive* — starving was free. We give the env a per-step
+death signal (`env.last_died`) and a reward that says: *reward = energy you
+gained, but a big penalty if you died this step* (`learning/rewards.py`). That one
+change is the lesson's headline.
 
-- Mean energy and survival climbing above the heuristic baseline.
-- The action mix shifting toward eating-when-on-food and away from wasted moves.
-- (Foreshadowing Lesson 2) communication staying near zero — because with a
-  per-ant reward, talking still doesn't pay. That failure motivates Lessons 3–4.
+## How it runs
 
-## Why the batch layout matters here
+A `Trainer` (`learning/trainer.py`) owns the loop; the `Learner` owns act/update:
 
-`encode/act/update` all operate on `[n_worlds, n_slots]`, so the learner trains
-on every ant in every parallel world simultaneously — thousands of transitions
-per step. That's "parallel rollouts," already built into the env.
+```
+s1 = encode(env)              # (energy bin, on food?, heard food?)
+a  = act(env)                 # ε-greedy over legal actions
+prev_energy = env.energy
+env.step(a)
+r  = reward(env, prev_energy, env.last_died)
+s2 = encode(env)
+learner.update(s1, a, r, s2, env)
+```
+
+Run headless across dozens of worlds → thousands of transitions per step. This is
+also the seam the architecture review asked for: a learner has a *lifecycle* a
+trainer drives, not "just a policy you swap in." (Replay buffers and centralized
+critics come in later lessons; the loop shape stays.)
+
+## Does it work?
+
+Yes — trained over 64 worlds, then evaluated greedily against a random baseline:
+
+| policy | deaths / 1k ant-steps | mean energy |
+|---|---|---|
+| random | ~16.7 | 10.2 |
+| **learned** | **~10.5** | **12.0** |
+
+**~37% fewer deaths, +18% energy** — the ant learned to eat when it's on food and
+hungry, and to stop squandering itself. (`test_learning.py` pins both the update
+arithmetic and that learning beats random.)
+
+## What's still weak — and what it sets up
+
+The state is coarse: `(energy bin) × (on food?) × (heard food?)` — 40 states. The
+ant **can't see where food is**, only whether it's standing on some, so it can't
+really learn to *seek* food; its wins are mostly "eat now" and "don't waste
+moves." That ceiling is the motivation for **Lesson 2 (Deep Q)**: swap the table
+for a small neural net that consumes a richer observation, so the ant can learn to
+*navigate* — and there we'll reproduce the original project's real failure:
+with a per-ant reward, **communication still doesn't pay**, which is what forces
+the team-reward work of Lesson 3.

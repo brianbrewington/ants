@@ -18,5 +18,6 @@ See docs/lessons/lesson-1-tabular-q.md for the plan.
 from .base import Learner
 from .rewards import survival_food_reward
 from .tabular import TabularQLearner
+from .trainer import Trainer
 
-__all__ = ["Learner", "survival_food_reward", "TabularQLearner"]
+__all__ = ["Learner", "survival_food_reward", "TabularQLearner", "Trainer"]

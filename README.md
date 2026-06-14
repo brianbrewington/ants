@@ -111,7 +111,9 @@ non-obvious design decisions (slot pool, the MPS lock, food conservation), and
 | 3 | The altruism fix | Team rewards + credit assignment (CTDE) so cooperation can pay. |
 | 4 | Learned communication | Differentiable messages — let the ants invent what to say. |
 
-You are here: **Lesson 0.6**. Toggle **World model → Nutrient** in the UI.
+You are here: **Lesson 1** — tabular Q-learning that visibly learns to survive
+(headless training; ~37% fewer deaths than random). Lesson 0.x worlds remain in
+the UI (World model toggle).
 
 ## Credits
 

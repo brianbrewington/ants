@@ -54,6 +54,7 @@ class HomeostaticRegime(Regime):
 
     def population_step(self, env, actions, light: bool) -> tuple[int, int]:
         dead = env.energy <= 0
+        env.last_died = dead                  # death signal for the RL reward
         n_dead = int(dead.sum().item())
         if n_dead:
             env._respawn(dead)
@@ -76,6 +77,7 @@ class LogisticRegime(Regime):
     def population_step(self, env, actions, light: bool) -> tuple[int, int]:
         n_born = env._reproduce(actions, light=light)
         dead = env.alive & (env.energy <= 1e-6)
+        env.last_died = dead                  # death signal for the RL reward
         env.alive[dead] = False
         env.energy[dead] = 0.0
         env._grow_food()

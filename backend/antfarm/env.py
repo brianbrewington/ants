@@ -84,6 +84,9 @@ class AntWorld:
         self.dest = torch.rand(B, S, 2, device=dev, generator=g) * W
         self.heard_food = torch.zeros(B, S, device=dev, dtype=f32)
         self.last_actions = torch.full((B, S), NOTHING, device=dev, dtype=torch.long)
+        # Who died THIS step (set by the regime). The death signal an RL reward
+        # needs -- the piece the 1996 reward never had.
+        self.last_died = torch.zeros(B, S, device=dev, dtype=torch.bool)
 
         # alive mask: first n_ants slots live, the rest are empty (eco) slots.
         self.alive = torch.zeros(B, S, device=dev, dtype=torch.bool)
