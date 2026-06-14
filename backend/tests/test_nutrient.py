@@ -6,7 +6,10 @@ longer absorbing (it germinates again from the nutrient), and (c) high growth
 rate no longer drives an absorbing collapse the way the logistic model did.
 """
 
+import torch
+
 from antfarm import AntWorld, SimConfig, make_policy
+from antfarm.env import NOTHING
 
 
 def _nutrient_env(**kw):
@@ -54,6 +57,20 @@ def test_zero_food_is_not_absorbing():
     for _ in range(60):
         env.step(pol(env))
     assert float(env.food.sum()) > 0.0, "food failed to germinate back from nutrient"
+
+
+def test_nutrient_growth_honors_per_world_r():
+    # Regression: the bifurcation sweep sets a per-world r vector; nutrient food
+    # growth must honor it (it once used the scalar cfg value, so nutrient sweeps
+    # silently ran every world at the same r -> a falsely flat diagram).
+    env = _nutrient_env(n_worlds=2, n_ants=8, max_ants=40, world_size=12, germination=0.0)
+    env.alive[:] = False                       # no ants -> isolate pure food growth
+    env.food[1] = env.food[0].clone()          # make the two worlds identical...
+    env.nutrient[1] = env.nutrient[0].clone()
+    env.growth_rate_vec = torch.tensor([0.3, 3.5], device=env.device)  # ...except r
+    for _ in range(3):
+        env.step(torch.full((2, env.n_slots), NOTHING))
+    assert not torch.allclose(env.food[0], env.food[1]), "per-world r ignored in nutrient growth"
 
 
 def test_high_r_food_does_not_get_absorbed():

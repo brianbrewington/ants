@@ -207,8 +207,12 @@ class AntWorld:
         B, W = cfg.n_worlds, cfg.world_size
         N, F = self.nutrient, self.food
 
-        # 1. growth on existing food, Monod-limited by local nutrient, drawn from N
-        grow = torch.minimum(cfg.food_growth_rate * F * (N / (N + cfg.half_sat)), N)
+        # 1. growth on existing food, Monod-limited by local nutrient, drawn from N.
+        #    r may be a single value or one-per-world (the bifurcation sweep sets a
+        #    per-world vector -- nutrient growth must honor it just like logistic does).
+        r = cfg.food_growth_rate if self.growth_rate_vec is None \
+            else self.growth_rate_vec.view(-1, 1, 1)
+        grow = torch.minimum(r * F * (N / (N + cfg.half_sat)), N)
         F = F + grow
         N = N - grow
 
