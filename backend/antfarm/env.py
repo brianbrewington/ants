@@ -233,9 +233,16 @@ class AntWorld:
                      + torch.roll(N, 1, 2) + torch.roll(N, -1, 2)) * 0.25
             N = N + cfg.food_diffusion * (neigh - N)
 
-        # 4. external nutrient inflow ("sunlight"); >0 makes the system OPEN
+        # 4. external nutrient inflow ("sunlight", a SOURCE) ...
         if cfg.nutrient_inflow > 0:
             N = N + cfg.nutrient_inflow
+        # ... and washout/decay (a SINK). Together they make the system OPEN: mass
+        # flows through rather than being conserved, so throughput and r set the
+        # dynamics and the enrichment bifurcation can re-emerge.
+        if cfg.nutrient_loss > 0:
+            keep = 1.0 - cfg.nutrient_loss
+            N = N * keep
+            F = F * keep
 
         self.nutrient = N.clamp_(min=0.0)
         self.food = F.clamp_(min=0.0)

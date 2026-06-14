@@ -56,6 +56,7 @@ export interface SimConfig {
   germination: number;
   half_sat: number;
   nutrient_inflow: number;
+  nutrient_loss: number;
   seed: number;
   device: string;
 }

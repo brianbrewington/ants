@@ -82,7 +82,11 @@ class SimConfig:
     nutrient_init: float = 14.0    # starting nutrient mass per cell (sets the mass budget)
     germination: float = 0.02      # spontaneous N->F rate (lets food restart from F=0)
     half_sat: float = 3.0          # Monod half-saturation: N at which growth is half-max
-    nutrient_inflow: float = 0.0   # external nutrient added per cell per step (0 = closed)
+    nutrient_inflow: float = 0.0   # external nutrient added per cell per step (source)
+    nutrient_loss: float = 0.0     # fraction of food+nutrient washed out per step (sink)
+    # inflow=loss=0 -> CLOSED (mass conserved). inflow>0 AND loss>0 -> OPEN/dissipative:
+    # mass flows through, steady level ~ inflow/loss, and r drives the dynamics around
+    # it -- which is where the paradox-of-enrichment bifurcation lives.
 
     # --- simulation control ---------------------------------------------
     seed: int = 0
@@ -128,6 +132,7 @@ class SimConfig:
         self.germination = float(clamp(self.germination, 0.0, 1.0))
         self.half_sat = float(clamp(self.half_sat, 1e-3, 1e6))
         self.nutrient_inflow = float(clamp(self.nutrient_inflow, 0.0, 1e6))
+        self.nutrient_loss = float(clamp(self.nutrient_loss, 0.0, 1.0))
 
         # PRODUCT ceilings -- per-field caps don't bound the *products* that drive
         # allocation: slot tensors scale as n_worlds*max_ants and food tensors as
