@@ -32,6 +32,7 @@ import torch
 
 from .config import SimConfig
 from .regimes import make_regime
+from .snapshot import to_snapshot
 
 EAT, BROADCAST, NOTHING, TELEPORT, LISTEN, RANDMOVE, REPRODUCE = range(7)
 ACTION_NAMES = ["eat", "broadcast", "nothing", "teleport", "listen", "randmove", "reproduce"]
@@ -454,25 +455,6 @@ class AntWorld:
                 "frac_reproduce": 0.0, "links": []}
 
     def snapshot(self) -> dict:
-        """JSON-ready picture of world 0 -- alive ants only."""
-        W = self.cfg.world_size
-        alive0 = self.alive[0].detach().to("cpu")
-        idx = torch.nonzero(alive0, as_tuple=False).flatten()
-        pos0 = self.pos[0].detach().to("cpu")[idx]
-        en0 = self.energy[0].detach().to("cpu")[idx]
-        act0 = self.last_actions[0].detach().to("cpu")[idx]
-
-        food0 = self.food[0].detach().to("cpu")
-        nz = torch.nonzero(food0 > 0, as_tuple=False)
-        food_list = [[int(x), int(y), float(food0[x, y])] for x, y in nz.tolist()]
-
-        return {
-            "world_size": W,
-            "ants": {"pos": pos0.tolist(), "energy": en0.tolist(), "action": act0.tolist()},
-            "food": food_list,
-            "links": self.last_info.get("links", []),
-            "metrics": {k: v for k, v in self.last_info.items() if k != "links"},
-            "energy_max": self.cfg.energy_max,
-            "max_food": self.cfg.max_food_size,
-            "ecosystem": self.cfg.ecosystem,
-        }
+        """JSON-ready picture of world 0. Thin delegate to snapshot.to_snapshot so
+        the simulation core stays headless (see snapshot.py)."""
+        return to_snapshot(self)
