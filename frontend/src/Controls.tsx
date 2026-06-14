@@ -10,16 +10,18 @@ const SPECS: Spec[] = [
   { key: "n_ants", label: "Number of ants", min: 5, max: 600, step: 1 },
   { key: "world_size", label: "World size", min: 12, max: 120, step: 1 },
   { key: "food_growth_rate", label: "Food growth rate  r", min: 0.2, max: 3.0, step: 0.05, eco: "only" },
+  { key: "food_seed", label: "Spore rain rate", min: 0, max: 0.3, step: 0.01, eco: "only" },
   { key: "food_diffusion", label: "Food diffusion  D", min: 0, max: 0.1, step: 0.005, eco: "only" },
   { key: "birth_threshold", label: "Birth threshold", min: 0.3, max: 1.0, step: 0.05, eco: "only" },
   { key: "birth_cost", label: "Birth cost", min: 0.1, max: 0.8, step: 0.05, eco: "only" },
+  { key: "max_ants", label: "Population cap", min: 500, max: 15000, step: 500, eco: "only" },
   { key: "energy_max", label: "Energy capacity", min: 5, max: 80, step: 1 },
   { key: "energy_cost", label: "Energy cost / step", min: 0.05, max: 1.5, step: 0.05 },
-  { key: "food_density", label: "Food density", min: 0.005, max: 0.2, step: 0.005 },
-  { key: "max_food_size", label: "Max food pile", min: 5, max: 150, step: 1 },
+  { key: "food_density", label: "Food density / patch frac", min: 0.005, max: 0.2, step: 0.005 },
+  { key: "max_food_size", label: "Max food pile / cell K", min: 5, max: 150, step: 1 },
   { key: "bite_size", label: "Bite size", min: 0.25, max: 5, step: 0.25 },
   { key: "move_radius", label: "Move radius", min: 0.5, max: 8, step: 0.5 },
-  { key: "comm_radius", label: "Comm radius", min: 1, max: 30, step: 1, eco: "no" },
+  { key: "comm_radius", label: "Comm radius", min: 1, max: 30, step: 1 },
 ];
 
 interface Props {
