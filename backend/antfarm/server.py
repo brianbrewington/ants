@@ -112,32 +112,39 @@ def get_config():
 
 @app.get("/api/bifurcation")
 async def bifurcation(r_min: float = 0.3, r_max: float = 3.0, n_r: int = 200,
-                      transient: int = 400, sample: int = 240):
+                      transient: int = 400, sample: int = 240, runs_per_r: int = 1):
     """Run the parallel-worlds sweep over food growth rate r.
 
     Declared async and run directly on the event-loop thread *on purpose*: a sync
     endpoint would be dispatched to a FastAPI worker thread, and PyTorch's MPS
     backend must be driven from the thread that initialized it. The sweep is only
     a few seconds, so briefly blocking the loop (pausing the live stream) is fine.
+    REVIEW-NOTE 2026-06-14 (deferred): blocking is intentional (single-thread MPS
+    safety). A background job would reintroduce the cross-thread-MPS segfault we
+    fixed. See docs/review-responses/2026-06-14-gpt-5.5.md.
     It inherits the current sim's food/energy knobs; the sweep raises the slot cap
     internally so FOOD, not the cap, limits the population."""
     # Clamp every knob: the sweep allocates [n_r, max_ants] tensors and runs
     # (transient+sample) steps, so unbounded inputs are an OOM / GPU-hog footgun.
     n_r = max(10, min(512, n_r))
+    runs_per_r = max(1, min(12, runs_per_r))
     transient = max(0, min(5000, transient))
     sample = max(10, min(3000, sample))
     r_min = max(0.0, min(4.0, r_min))
     r_max = max(r_min + 1e-3, min(4.0, r_max))
+    # Bound the total world count (n_r * runs_per_r): each is a full simulation.
+    if n_r * runs_per_r > 4000:
+        runs_per_r = max(1, 4000 // n_r)
 
     base = SIM.cfg.to_dict()
     if not base.get("ecosystem"):
         base.update(ECO_SWEEP_ECONOMY)  # ensure a food-limited regime, not flat
     # Cap the sweep's world size independently of the live sim: the sweep runs
-    # n_r worlds, so a large live world_size would blow up n_r*W^2 food tensors.
+    # many worlds, so a large live world_size would blow up worlds*W^2 food tensors.
     base["world_size"] = min(int(base.get("world_size", 48)), 64)
     async with SIM_LOCK:                  # never run GPU work alongside the live step
-        out = bifurcation_sweep(base, r_min=r_min, r_max=r_max,
-                                n_r=n_r, transient=transient, sample=sample)
+        out = bifurcation_sweep(base, r_min=r_min, r_max=r_max, n_r=n_r,
+                                transient=transient, sample=sample, runs_per_r=runs_per_r)
     return JSONResponse(out)
 
 

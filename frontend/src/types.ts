@@ -60,6 +60,7 @@ export interface BifurcationData {
   max: number[];
   mean: number[];
   pop_ref: number;
+  runs_per_r: number;
   n_slots: number;
 }
 

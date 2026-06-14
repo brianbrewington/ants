@@ -70,18 +70,24 @@ export function Bifurcation() {
   const [settle, setSettle] = useState(400);
   const [sample, setSample] = useState(240);
   const [nr, setNr] = useState(200);
+  const [rMin, setRMin] = useState(0.3);
+  const [rMax, setRMax] = useState(3.0);
+  const [runs, setRuns] = useState(1);
 
   const run = async () => {
     setLoading(true); setErr(null); setInfo(null);
     try {
       const t0 = performance.now();
-      const q = `n_r=${nr}&transient=${settle}&sample=${sample}`;
+      const lo = Math.min(rMin, rMax - 0.01);
+      const q = `n_r=${nr}&transient=${settle}&sample=${sample}&runs_per_r=${runs}` +
+        `&r_min=${lo}&r_max=${rMax}`;
       const res = await fetch(`${apiBase()}/api/bifurcation?${q}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const d = (await res.json()) as BifurcationData;
       if (ref.current) draw(ref.current, d);
       const secs = ((performance.now() - t0) / 1000).toFixed(1);
-      setInfo(`${d.r.length} worlds · ${settle}+${sample} steps each · y=1.0 ≈ ${Math.round(d.pop_ref)} ants · ${secs}s on GPU`);
+      const replicates = d.runs_per_r > 1 ? ` × ${d.runs_per_r} runs` : "";
+      setInfo(`${d.r.length} r-values${replicates} · ${settle}+${sample} steps · y=1.0 ≈ ${Math.round(d.pop_ref)} ants · ${secs}s on GPU`);
     } catch (e: any) {
       setErr(e.message ?? "failed");
     } finally {
@@ -98,17 +104,21 @@ export function Bifurcation() {
         </button>
       </div>
       <div className="bif-controls">
+        <NumInput label="r min" value={rMin} set={setRMin} min={0} max={4} step={0.05} />
+        <NumInput label="r max" value={rMax} set={setRMax} min={0.05} max={4} step={0.05} />
+        <NumInput label="r values" value={nr} set={setNr} min={10} max={512} step={10} />
+        <NumInput label="runs / r" value={runs} set={setRuns} min={1} max={12} step={1} />
         <NumInput label="settle" value={settle} set={setSettle} min={100} max={3000} step={100} />
         <NumInput label="sample" value={sample} set={setSample} min={50} max={1500} step={50} />
-        <NumInput label="worlds (r res.)" value={nr} set={setNr} min={40} max={400} step={20} />
       </div>
       <canvas ref={ref} width={540} height={240} className="bif-canvas" />
       <div className="hint">
         Each column is one parallel world with a different food growth rate <b>r</b>.
         Thin band → stable. Wide / split band → boom-bust oscillation &amp; chaos.
-        Far left → extinction. If a band looks suspiciously thin, raise <b>settle</b> &amp;
-        <b> sample</b> to be sure it has truly converged. The live view pauses for the
-        few seconds the sweep runs.
+        Far left → extinction. <b>Zoom</b> with r min/max and raise <b>runs/r</b>
+        (replicates at the same r, different noise) to test whether a low-r dropout is
+        a real island of stability or just one unlucky run; raise <b>settle</b>/<b>sample</b>
+        for slow oscillations. The live view pauses for the few seconds the sweep runs.
         {info && <span style={{ color: "#7cffcb" }}> · {info}</span>}
         {err && <span style={{ color: "#ff6b81" }}> · {err}</span>}
       </div>

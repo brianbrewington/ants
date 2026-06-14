@@ -7,11 +7,16 @@ population over a sampling window. Plotting those samples against r is a
 bifurcation diagram -- the period-doubling / boom-bust route, emergent from ants
 foraging a renewable resource.
 
+`runs_per_r` adds REPLICATES: each r is simulated in several independent worlds
+(same r, different random realization). Because the world is stochastic, a single
+run near the extinction threshold can die or survive by luck; replicates separate
+a real island of stability from a lucky draw. (This is genuinely different from
+sampling r vs r+eps: replicates hold r fixed and vary only the noise.)
+
 Reading it:
   * low r   -> food can't keep up -> population collapses to ~0 (extinction).
   * mid r   -> a single stable level (dots collapse to a thin line).
-  * onset & high r -> the line widens/splits: boom-bust oscillation (predator-
-    prey limit cycle) toward chaos -- the "paradox of enrichment".
+  * onset & high r -> the line widens/splits: boom-bust oscillation toward chaos.
 
 Speed: every step uses env.step(light=True), which skips the per-step GPU->CPU
 metric syncs. We only pull population off the GPU once, at the end.
@@ -28,44 +33,50 @@ from .policies import ForagePolicy
 
 def bifurcation_sweep(base: dict, r_min: float = 0.3, r_max: float = 3.0,
                       n_r: int = 200, transient: int = 400, sample: int = 240,
-                      max_ants: int = 6000, per_r_points: int = 70) -> dict:
+                      runs_per_r: int = 1, max_ants: int = 3000,
+                      per_r_points: int = 80) -> dict:
+    n_r = max(2, n_r)
+    runs_per_r = max(1, runs_per_r)
+    total = n_r * runs_per_r  # one world per (r, replicate)
+
     cfg = SimConfig.from_dict({
         **base,
         "ecosystem": True,
-        "n_worlds": n_r,
+        "n_worlds": total,
         "max_ants": max_ants,   # high enough that FOOD, not the slot cap, limits the pop
         "enable_comm": False,   # isolate population<->food dynamics; skip O(N^2) comm
     })
     env = AntWorld(cfg)
-    env.growth_rate_vec = torch.linspace(r_min, r_max, n_r, device=env.device)
-    policy = ForagePolicy()
+    r_unique = torch.linspace(r_min, r_max, n_r, device=env.device)
+    # world w = r_index*runs_per_r + replicate  -> repeat each r `runs_per_r` times.
+    env.growth_rate_vec = r_unique.repeat_interleave(runs_per_r)
 
     for _ in range(transient):
-        env.step(policy(env), light=True)
+        env.step(ForagePolicy()(env), light=True)
 
     series = []
     for _ in range(sample):
-        env.step(policy(env), light=True)
-        series.append(env.alive.sum(dim=1))           # population per world, stays on GPU
-    pops = torch.stack(series, dim=0).float()          # [sample, n_r]  (one sync below)
+        env.step(ForagePolicy()(env), light=True)
+        series.append(env.alive.sum(dim=1))               # population per world [total]
+    pops = torch.stack(series, dim=0).float()              # [sample, total]
+    pops = pops.view(sample, n_r, runs_per_r)              # split out replicates
 
-    r_list = env.growth_rate_vec.tolist()
-    pmin = pops.min(dim=0).values
-    pmax = pops.max(dim=0).values
-    pmean = pops.mean(dim=0)
-    ref = float(pmax.max().item()) or 1.0              # scale so the diagram fills the plot
+    ref = float(pops.max().item()) or 1.0                  # scale so the diagram fills the plot
+    # Aggregate each r across BOTH time and replicates.
+    per_r = (pops / ref).permute(1, 0, 2).reshape(n_r, sample * runs_per_r)
 
-    # Sub-sample the window so the attractor shows without a huge payload.
-    stride = max(1, sample // per_r_points)
-    sub = (pops[::stride] / ref).t().tolist()          # [n_r][~per_r_points], 0..1
+    r_list = r_unique.tolist()
+    stride = max(1, (sample * runs_per_r) // per_r_points)
+    sub = per_r[:, ::stride].tolist()                      # [n_r][~per_r_points]
     points = [[r_list[i], v] for i, vals in enumerate(sub) for v in vals]
 
     return {
         "r": r_list,
-        "points": points,                              # already scaled 0..1 by ref
-        "min": (pmin / ref).tolist(),
-        "max": (pmax / ref).tolist(),
-        "mean": (pmean / ref).tolist(),
-        "pop_ref": ref,                                # actual ant count at y=1.0
+        "points": points,                                  # scaled 0..1
+        "min": per_r.min(dim=1).values.tolist(),
+        "max": per_r.max(dim=1).values.tolist(),
+        "mean": per_r.mean(dim=1).tolist(),
+        "pop_ref": ref,
+        "runs_per_r": runs_per_r,
         "n_slots": env.n_slots,
     }

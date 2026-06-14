@@ -38,7 +38,10 @@ N_ACTIONS = 7
 
 # Communication builds a pairwise [n_worlds, n_slots, n_slots] tensor. Above this
 # many pairs we skip it to avoid an abrupt huge allocation (MPS handles those
-# badly). A real fix at scale is spatial binning; see docs/ARCHITECTURE.md.
+# badly).
+# REVIEW-NOTE 2026-06-14 (deferred): this CAP is a guard, not the real fix. Proper
+# spatial binning (only check nearby ants) lands with Lesson 0.6 when populations
+# scale up. See docs/review-responses/2026-06-14-gpt-5.5.md.
 COMM_PAIR_CAP = 50_000_000
 
 
