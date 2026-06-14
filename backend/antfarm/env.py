@@ -31,6 +31,7 @@ from __future__ import annotations
 import torch
 
 from .config import SimConfig
+from .regimes import make_regime
 
 EAT, BROADCAST, NOTHING, TELEPORT, LISTEN, RANDMOVE, REPRODUCE = range(7)
 ACTION_NAMES = ["eat", "broadcast", "nothing", "teleport", "listen", "randmove", "reproduce"]
@@ -57,6 +58,9 @@ class AntWorld:
         # Optional per-world override of the food growth rate r, shape [n_worlds].
         # Used by the bifurcation sweep so every parallel world runs a different r.
         self.growth_rate_vec: torch.Tensor | None = None
+        # The world regime (homeostatic / logistic / nutrient) owns the
+        # mode-specific sequence; step() just orchestrates it. See regimes.py.
+        self.regime = make_regime(config)
         self.reset()
 
     # ------------------------------------------------------------------ #
@@ -86,28 +90,11 @@ class AntWorld:
         # can add later; deterministic start makes the homeostatic demo legible.
         self.energy[self.alive] = cfg.energy_max
 
-        # Food (+ nutrient substrate for the closed-loop model) -------
+        # Food (+ nutrient substrate). Allocate the grids here; the regime fills
+        # them per its model (homeostatic refill / logistic patches / nutrient pool).
         self.food = torch.zeros(B, W, W, device=dev, dtype=f32)
         self.nutrient = torch.zeros(B, W, W, device=dev, dtype=f32)
-        if cfg.ecosystem and cfg.food_model == "nutrient":
-            # Most of the world's mass starts in the nutrient pool; food germinates
-            # out of it. (Lesson 0.6 — see _grow_food_nutrient.) But seed some
-            # initial food patches up front (drawn FROM the nutrient, so mass is
-            # still conserved) -- otherwise the starting population starves before
-            # germination can build food up from zero.
-            self.nutrient = torch.full((B, W, W), cfg.nutrient_init, device=dev, dtype=f32)
-            seed = (torch.rand(B, W, W, device=dev, generator=g) < cfg.food_density).float()
-            sprout = seed * 0.5 * self.nutrient
-            self.food = sprout
-            self.nutrient = self.nutrient - sprout
-        elif cfg.ecosystem:
-            # Sparse food PATCHES, not a carpet (Lesson 0.5): seed only a small
-            # fraction of cells; with diffusion off, empty cells stay empty so
-            # food stays localized. Spore rain reseeds new patches over time.
-            seed = (torch.rand(B, W, W, device=dev, generator=g) < cfg.food_density).float()
-            self.food = seed * (0.5 + 0.5 * torch.rand(B, W, W, device=dev, generator=g)) * cfg.max_food_size
-        else:
-            self._spawn_food(self._target_food_cells(), only_if_under_target=False)
+        self.regime.reset_resources(self)
 
         self.step_count = 0
         self.last_info = self._empty_info()
@@ -317,43 +304,10 @@ class AntWorld:
         on_food = (self._food_at_ant() > 0)
         links = self._communicate(actions, on_food)
 
-        nutrient_mode = cfg.ecosystem and cfg.food_model == "nutrient"
-
-        # --- METABOLISM (alive only) ----------------------------------
-        if nutrient_mode:
-            # Burn at most what the ant has, and return that mass to the nutrient
-            # pool at its cell (closed loop -> mass conserved).
-            avail = self.energy.clamp(min=0.0)
-            burn = torch.where(self.alive,
-                               torch.minimum(torch.full_like(avail, cfg.energy_cost), avail),
-                               torch.zeros_like(avail))
-            self._deposit_nutrient(burn)
-            self.energy = self.energy - burn
-        else:
-            self.energy = torch.where(self.alive, self.energy - cfg.energy_cost, self.energy)
-
-        # --- BIRTHS & DEATHS ------------------------------------------
-        if cfg.ecosystem:
-            n_born = self._reproduce(actions, light=light)
-            dead = self.alive & (self.energy <= 1e-6)
-            if nutrient_mode:
-                # any body mass left at death returns to the soil (carcass)
-                self._deposit_nutrient(torch.where(dead, self.energy.clamp(min=0.0),
-                                                   torch.zeros_like(self.energy)))
-            self.alive[dead] = False           # boolean-mask assign: no CPU sync
-            self.energy[dead] = 0.0
-            if nutrient_mode:
-                self._grow_food_nutrient()
-            else:
-                self._grow_food()
-            n_dead = 0 if light else int(dead.sum().item())
-        else:
-            n_born = 0
-            dead = self.energy <= 0
-            n_dead = int(dead.sum().item())
-            if n_dead:
-                self._respawn(dead)
-            self._spawn_food(max(1, self._target_food_cells() // 8))
+        # --- METABOLISM, BIRTHS, DEATHS, FOOD GROWTH ------------------
+        # All regime-specific; step() just orchestrates. (see regimes.py)
+        self.regime.metabolize(self, actions)
+        n_born, n_dead = self.regime.population_step(self, actions, light)
 
         self.step_count += 1
 
