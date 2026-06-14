@@ -16,16 +16,16 @@ export const HOMEOSTATIC_PRESET: Partial<SimConfig> = {
 
 export const ECOSYSTEM_PRESET: Partial<SimConfig> = {
   ecosystem: true,
-  n_ants: 300,
+  n_ants: 250,
   max_ants: 6000,
   world_size: 48,
   energy_cost: 0.5,
   bite_size: 3.0,
-  max_food_size: 10,
-  food_density: 0.12,
-  food_growth_rate: 1.0,   // near the onset of oscillation; try sliding it up
-  food_diffusion: 0.015,
-  food_seed: 0.0,
+  max_food_size: 12,
+  food_density: 0.06,      // sparse initial PATCHES, not a carpet
+  food_growth_rate: 1.2,   // the bifurcation knob; slide it for boom-bust / extinction
+  food_diffusion: 0.0,     // OFF on purpose: diffusion floods the whole grid
+  food_seed: 0.06,         // spore rain reseeds new patches so food stays patchy + scarce
   birth_threshold: 0.6,
   birth_cost: 0.5,
 };

@@ -38,12 +38,16 @@ export function MetricsPanel({ history, ecosystem }: { history: Metrics[]; ecosy
   const col = (k: keyof Metrics) => history.map((m) => m[k] as number);
   const m = history.length ? history[history.length - 1] : null;
 
+  // [label, fraction, action-id]. Reproduce only matters in ecosystem mode.
   const actions: [string, number, number][] = m
     ? [
         ["eat", m.frac_eat, 0],
         ["broadcast", m.frac_broadcast, 1],
         ["listen", m.frac_listen, 4],
+        ["teleport", m.frac_teleport, 3],
         ["move", m.frac_move, 5],
+        ["nothing", m.frac_nothing, 2],
+        ...(ecosystem ? ([["reproduce", m.frac_reproduce, 6]] as [string, number, number][]) : []),
       ]
     : [];
 

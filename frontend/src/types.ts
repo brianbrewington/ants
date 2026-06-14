@@ -11,8 +11,11 @@ export interface Metrics {
   total_food: number;
   frac_eat: number;
   frac_broadcast: number;
+  frac_nothing: number;
+  frac_teleport: number;
   frac_listen: number;
   frac_move: number;
+  frac_reproduce: number;
 }
 
 export interface Snapshot {

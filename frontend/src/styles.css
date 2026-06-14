@@ -114,6 +114,12 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 4px; }
   width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line);
   background: #05060f; display: block;
 }
+.bif-controls { display: flex; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.bif-num { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted); }
+.bif-num input {
+  width: 84px; background: #0a0d18; color: var(--ink); border: 1px solid var(--line);
+  border-radius: 7px; padding: 5px 7px; font-variant-numeric: tabular-nums;
+}
 
 @media (max-width: 1080px) {
   .layout { grid-template-columns: 1fr; }

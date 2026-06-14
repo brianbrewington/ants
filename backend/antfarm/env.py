@@ -77,10 +77,13 @@ class AntWorld:
         # Food --------------------------------------------------------
         self.food = torch.zeros(B, W, W, device=dev, dtype=f32)
         if cfg.ecosystem:
-            # Seed ~half the cells at a moderate level; logistic growth +
-            # diffusion will organize it from there.
-            seed = (torch.rand(B, W, W, generator=g).to(dev) < 0.5).float()
-            self.food = seed * torch.rand(B, W, W, generator=g).to(dev) * cfg.max_food_size
+            # Sparse food PATCHES, not a carpet: seed only a small fraction of
+            # cells (food_density) at a high level. With diffusion off, empty
+            # cells stay empty (logistic growth can't start from 0), so food
+            # remains localized -- something to find and worth communicating.
+            # Spore rain (food_seed) reseeds new patches over time.
+            seed = (torch.rand(B, W, W, generator=g).to(dev) < cfg.food_density).float()
+            self.food = seed * (0.5 + 0.5 * torch.rand(B, W, W, generator=g).to(dev)) * cfg.max_food_size
         else:
             self._spawn_food(self._target_food_cells(), only_if_under_target=False)
 
@@ -261,8 +264,11 @@ class AntWorld:
             "total_food": float(self.food.sum(dim=(1, 2)).mean().item()),
             "frac_eat": self._frac(actions, EAT),
             "frac_broadcast": self._frac(actions, BROADCAST),
+            "frac_nothing": self._frac(actions, NOTHING),
+            "frac_teleport": self._frac(actions, TELEPORT),
             "frac_listen": self._frac(actions, LISTEN),
             "frac_move": self._frac(actions, RANDMOVE),
+            "frac_reproduce": self._frac(actions, REPRODUCE),
             "links": links,
         }
         self.last_info = info
@@ -368,8 +374,9 @@ class AntWorld:
     def _empty_info(self) -> dict:
         return {"step": 0, "population": int(self.alive.sum().item()), "food_eaten": 0.0,
                 "deaths": 0, "births": 0, "mean_energy": 0.0, "total_food": 0.0,
-                "frac_eat": 0.0, "frac_broadcast": 0.0, "frac_listen": 0.0,
-                "frac_move": 0.0, "links": []}
+                "frac_eat": 0.0, "frac_broadcast": 0.0, "frac_nothing": 0.0,
+                "frac_teleport": 0.0, "frac_listen": 0.0, "frac_move": 0.0,
+                "frac_reproduce": 0.0, "links": []}
 
     def snapshot(self) -> dict:
         """JSON-ready picture of world 0 -- alive ants only."""

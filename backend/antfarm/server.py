@@ -40,8 +40,8 @@ STRUCTURAL = {"world_size", "n_ants", "n_worlds", "device", "seed", "ecosystem",
 # Mirrors frontend/src/presets.ts ECOSYSTEM_PRESET (minus structural fields).
 ECO_SWEEP_ECONOMY = {
     "world_size": 48, "energy_max": 20.0, "energy_cost": 0.5, "bite_size": 3.0,
-    "max_food_size": 10.0, "food_density": 0.12, "food_diffusion": 0.015,
-    "food_seed": 0.0, "birth_threshold": 0.6, "birth_cost": 0.5,
+    "max_food_size": 12.0, "food_density": 0.06, "food_diffusion": 0.0,
+    "food_seed": 0.06, "birth_threshold": 0.6, "birth_cost": 0.5,
 }
 
 
