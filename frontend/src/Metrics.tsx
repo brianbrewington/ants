@@ -1,5 +1,17 @@
 import type { Metrics } from "./types";
-import { ACTION_COLOR } from "./types";
+import { ACTION, ACTION_COLOR } from "./types";
+
+// What each action does — shown as a hover tooltip on its bar. Order here is the
+// display order in the panel.
+const ACTION_META: { name: string; aid: number; tip: string }[] = [
+  { name: "eat", aid: ACTION.EAT, tip: "Consume food in the current cell (if any, and not already full)." },
+  { name: "broadcast", aid: ACTION.BROADCAST, tip: "Announce your location to nearby listeners." },
+  { name: "listen", aid: ACTION.LISTEN, tip: "Lock onto the nearest broadcaster as your destination." },
+  { name: "teleport", aid: ACTION.TELEPORT, tip: "Jump to the destination you last heard about." },
+  { name: "move", aid: ACTION.RANDMOVE, tip: "Wander a short random step." },
+  { name: "nothing", aid: ACTION.NOTHING, tip: "Rest — do nothing this step." },
+  { name: "reproduce", aid: ACTION.REPRODUCE, tip: "Spend energy to place an offspring in a nearby empty slot." },
+];
 
 // Lightweight inline-SVG sparkline. The 1997 version plotted four population
 // metrics over time; we keep that spirit. As the lessons add learning, this is
@@ -38,18 +50,17 @@ export function MetricsPanel({ history, ecosystem }: { history: Metrics[]; ecosy
   const col = (k: keyof Metrics) => history.map((m) => m[k] as number);
   const m = history.length ? history[history.length - 1] : null;
 
-  // [label, fraction, action-id]. Reproduce only matters in ecosystem mode.
-  const actions: [string, number, number][] = m
-    ? [
-        ["eat", m.frac_eat, 0],
-        ["broadcast", m.frac_broadcast, 1],
-        ["listen", m.frac_listen, 4],
-        ["teleport", m.frac_teleport, 3],
-        ["move", m.frac_move, 5],
-        ["nothing", m.frac_nothing, 2],
-        ...(ecosystem ? ([["reproduce", m.frac_reproduce, 6]] as [string, number, number][]) : []),
-      ]
-    : [];
+  // All 7 actions, always shown. `reproduce` is greyed out in Homeostatic mode
+  // (it's a no-op there since the population is fixed) — the tooltip explains why.
+  const fracOf: Record<number, number> = m
+    ? { 0: m.frac_eat, 1: m.frac_broadcast, 2: m.frac_nothing, 3: m.frac_teleport,
+        4: m.frac_listen, 5: m.frac_move, 6: m.frac_reproduce }
+    : {};
+  const actions = (m ? ACTION_META : []).map((a) => ({
+    ...a,
+    frac: fracOf[a.aid] ?? 0,
+    active: a.aid !== ACTION.REPRODUCE || ecosystem,
+  }));
 
   return (
     <div className="metrics">
@@ -72,16 +83,22 @@ export function MetricsPanel({ history, ecosystem }: { history: Metrics[]; ecosy
 
       <div className="actionbars">
         <div className="group-title">Action mix</div>
-        {actions.map(([name, frac, aid]) => (
-          <div className="abar" key={name}>
-            <span className="abar-label" style={{ color: ACTION_COLOR[aid] }}>{name}</span>
-            <div className="abar-track">
-              <div className="abar-fill"
-                   style={{ width: `${(frac * 100).toFixed(0)}%`, background: ACTION_COLOR[aid] }} />
+        {actions.map(({ name, frac, aid, tip, active }) => {
+          const color = active ? ACTION_COLOR[aid] : "#5a6080";
+          const title = active
+            ? tip
+            : `${tip}\n\n(Greyed out: only active in Ecosystem mode — the population is fixed in Homeostatic mode, so reproduction does nothing.)`;
+          return (
+            <div className={"abar" + (active ? "" : " inactive")} key={name} title={title}>
+              <span className="abar-label" style={{ color }}>{name}</span>
+              <div className="abar-track">
+                <div className="abar-fill"
+                     style={{ width: `${(frac * 100).toFixed(0)}%`, background: color }} />
+              </div>
+              <span className="abar-val">{(frac * 100).toFixed(0)}%</span>
             </div>
-            <span className="abar-val">{(frac * 100).toFixed(0)}%</span>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

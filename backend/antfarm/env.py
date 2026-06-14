@@ -59,11 +59,15 @@ class AntWorld:
         B, S, W = cfg.n_worlds, self.n_slots, cfg.world_size
         dev = self.device
         f32 = torch.float32
-        g = torch.Generator(device="cpu").manual_seed(cfg.seed)
+        # ONE per-env generator drives ALL randomness -- initial placement *and*
+        # every per-step dynamic (movement, spores, respawn, births). This is
+        # what makes `seed` actually reproducible and isolates each env's RNG
+        # stream from the global one (so a sweep can't perturb the live sim).
+        g = self.gen = torch.Generator(device=dev).manual_seed(cfg.seed)
 
-        self.pos = (torch.rand(B, S, 2, generator=g).to(dev)) * W
+        self.pos = torch.rand(B, S, 2, device=dev, generator=g) * W
         self.energy = torch.zeros(B, S, device=dev, dtype=f32)
-        self.dest = (torch.rand(B, S, 2, generator=g).to(dev)) * W
+        self.dest = torch.rand(B, S, 2, device=dev, generator=g) * W
         self.heard_food = torch.zeros(B, S, device=dev, dtype=f32)
         self.last_actions = torch.full((B, S), NOTHING, device=dev, dtype=torch.long)
 
@@ -82,8 +86,8 @@ class AntWorld:
             # cells stay empty (logistic growth can't start from 0), so food
             # remains localized -- something to find and worth communicating.
             # Spore rain (food_seed) reseeds new patches over time.
-            seed = (torch.rand(B, W, W, generator=g).to(dev) < cfg.food_density).float()
-            self.food = seed * (0.5 + 0.5 * torch.rand(B, W, W, generator=g).to(dev)) * cfg.max_food_size
+            seed = (torch.rand(B, W, W, device=dev, generator=g) < cfg.food_density).float()
+            self.food = seed * (0.5 + 0.5 * torch.rand(B, W, W, device=dev, generator=g)) * cfg.max_food_size
         else:
             self._spawn_food(self._target_food_cells(), only_if_under_target=False)
 
@@ -105,9 +109,9 @@ class AntWorld:
         dev = self.device
         K = n_per_world
         b_idx = torch.arange(B, device=dev).repeat_interleave(K)
-        xs = torch.randint(0, W, (B * K,), device=dev)
-        ys = torch.randint(0, W, (B * K,), device=dev)
-        amounts = (0.2 + 0.8 * torch.rand(B * K, device=dev)) * cfg.max_food_size
+        xs = torch.randint(0, W, (B * K,), device=dev, generator=self.gen)
+        ys = torch.randint(0, W, (B * K,), device=dev, generator=self.gen)
+        amounts = (0.2 + 0.8 * torch.rand(B * K, device=dev, generator=self.gen)) * cfg.max_food_size
         if only_if_under_target:
             count = (self.food > 0).flatten(1).sum(dim=1)
             under = (count < self._target_food_cells()).float()
@@ -150,8 +154,8 @@ class AntWorld:
             n = max(1, int(cfg.food_seed * W))  # cells reseeded per world per step
             dev = self.device
             b_idx = torch.arange(B, device=dev).repeat_interleave(n)
-            xs = torch.randint(0, W, (B * n,), device=dev)
-            ys = torch.randint(0, W, (B * n,), device=dev)
+            xs = torch.randint(0, W, (B * n,), device=dev, generator=self.gen)
+            ys = torch.randint(0, W, (B * n,), device=dev, generator=self.gen)
             F.index_put_((b_idx, xs, ys),
                          torch.full((B * n,), 0.05 * K, device=dev), accumulate=True)
 
@@ -215,8 +219,8 @@ class AntWorld:
 
         # --- MOVE / TELEPORT ------------------------------------------
         is_move = (actions == RANDMOVE)
-        ang = torch.rand(B, S, device=dev) * (2 * torch.pi)
-        rad = torch.rand(B, S, device=dev) * cfg.move_radius
+        ang = torch.rand(B, S, device=dev, generator=self.gen) * (2 * torch.pi)
+        rad = torch.rand(B, S, device=dev, generator=self.gen) * cfg.move_radius
         step_vec = torch.stack([torch.cos(ang) * rad, torch.sin(ang) * rad], dim=-1)
         self.pos = torch.where(is_move[..., None], self.pos + step_vec, self.pos)
         is_tp = (actions == TELEPORT)
@@ -283,7 +287,7 @@ class AntWorld:
     # ------------------------------------------------------------------ #
     def _communicate(self, actions, on_food):
         cfg = self.cfg
-        B, S, W = cfg.n_worlds, self.n_slots, cfg.world_size
+        S, W = self.n_slots, cfg.world_size
         dev = self.device
         is_broadcaster = (actions == BROADCAST) & self.alive
         is_listener = (actions == LISTEN) & self.alive
@@ -350,7 +354,7 @@ class AntWorld:
         tslot = target_slot[bsel, isel]                       # child slots
         # write children
         self.alive[bsel, tslot] = True
-        jitter = (torch.rand(bsel.numel(), 2, device=dev) - 0.5) * 2.0
+        jitter = (torch.rand(bsel.numel(), 2, device=dev, generator=self.gen) - 0.5) * 2.0
         self.pos[bsel, tslot] = (self.pos[bsel, isel] + jitter).remainder(cfg.world_size)
         self.dest[bsel, tslot] = self.pos[bsel, tslot]
         self.energy[bsel, tslot] = cost
@@ -364,8 +368,8 @@ class AntWorld:
         cfg = self.cfg
         W = cfg.world_size
         n = int(dead.sum().item())
-        self.pos[dead] = torch.rand(n, 2, device=self.device) * W
-        self.dest[dead] = torch.rand(n, 2, device=self.device) * W
+        self.pos[dead] = torch.rand(n, 2, device=self.device, generator=self.gen) * W
+        self.dest[dead] = torch.rand(n, 2, device=self.device, generator=self.gen) * W
         self.energy[dead] = cfg.energy_max
         self.heard_food[dead] = 0.0
         self.alive[dead] = True

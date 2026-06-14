@@ -9,7 +9,8 @@ keeps the env code free of magic numbers.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict, replace
+from dataclasses import asdict, dataclass, replace
+
 import torch
 
 
@@ -66,6 +67,39 @@ class SimConfig:
     seed: int = 0
     device: str = "auto"          # "auto" -> mps if present else cpu
 
+    # --- validation ------------------------------------------------------
+    def __post_init__(self):
+        """Clamp every field to a sane range so no client input (REST query, or
+        a config/reset message over the WebSocket) can allocate an absurd tensor,
+        divide by zero, or push the food PDE past its stability limit. Runs on
+        every construction, including `from_dict` and `with_updates`."""
+        def clamp(v, lo, hi):
+            return max(lo, min(hi, v))
+
+        # structural sizes -- the dangerous ones for memory
+        self.world_size = int(clamp(int(self.world_size), 2, 1024))
+        self.n_worlds = int(clamp(int(self.n_worlds), 1, 4096))
+        self.n_ants = int(clamp(int(self.n_ants), 1, 200_000))
+        self.max_ants = int(clamp(int(self.max_ants), self.n_ants, 200_000))
+
+        # energy / food economy -- non-negative, finite
+        self.energy_max = float(clamp(self.energy_max, 1.0, 1e6))
+        self.energy_cost = float(clamp(self.energy_cost, 0.0, 1e6))
+        self.max_food_size = float(clamp(self.max_food_size, 1e-3, 1e6))
+        self.bite_size = float(clamp(self.bite_size, 0.0, 1e6))
+        self.food_density = float(clamp(self.food_density, 0.0, 1.0))
+        self.move_radius = float(clamp(self.move_radius, 0.0, 1e4))
+        self.comm_radius = float(clamp(self.comm_radius, 0.0, 1e4))
+
+        # ecosystem dynamics
+        self.food_growth_rate = float(clamp(self.food_growth_rate, 0.0, 4.0))
+        # explicit 4-neighbour diffusion is stable only up to ~0.25
+        self.food_diffusion = float(clamp(self.food_diffusion, 0.0, 0.25))
+        self.food_seed = float(clamp(self.food_seed, 0.0, 1.0))
+        self.birth_threshold = float(clamp(self.birth_threshold, 0.0, 1.0))
+        self.birth_cost = float(clamp(self.birth_cost, 0.0, 1.0))
+        self.seed = int(self.seed)
+
     # --- bookkeeping -----------------------------------------------------
     def resolved_device(self) -> str:
         return pick_device(self.device)
@@ -74,11 +108,11 @@ class SimConfig:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict) -> "SimConfig":
+    def from_dict(cls, d: dict) -> SimConfig:
         # Only accept keys we know about; ignore anything stray from the client.
         known = {f for f in cls.__dataclass_fields__}  # type: ignore[attr-defined]
         clean = {k: v for k, v in d.items() if k in known}
         return cls(**clean)
 
-    def with_updates(self, **kw) -> "SimConfig":
+    def with_updates(self, **kw) -> SimConfig:
         return replace(self, **kw)

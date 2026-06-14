@@ -1,9 +1,11 @@
-# Backend dependencies. Install into a venv:
+# Runtime dependencies, pinned to the tested minor versions for reproducibility.
 #   python3 -m venv .venv
 #   ./.venv/bin/pip install -r requirements.txt
 #
-# torch ships with the Apple MPS (Metal) GPU backend on arm64 macs — no CUDA.
-torch>=2.4
-fastapi>=0.110
-uvicorn[standard]>=0.29
-numpy>=1.26
+# torch ships with the Apple MPS (Metal) GPU backend on arm64 macs (no CUDA).
+# On CI / Linux, install the CPU wheel:
+#   pip install torch~=2.12.0 --index-url https://download.pytorch.org/whl/cpu
+torch~=2.12.0
+fastapi~=0.137.0
+uvicorn[standard]~=0.49.0
+numpy~=2.4.0

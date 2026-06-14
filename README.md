@@ -66,6 +66,32 @@ cd frontend && npm run build      # emits frontend/dist
 cd backend && ./.venv/bin/python -m tests.smoke
 ```
 
+## Development
+
+```bash
+cd backend
+./.venv/bin/pip install -r requirements-dev.txt   # pytest + ruff
+./.venv/bin/pytest          # invariants: food conservation, torus, death/respawn,
+                            # reproduction slot-assignment, reproducibility
+./.venv/bin/ruff check antfarm tests
+```
+
+Tests run on CPU so they match CI. The GitHub Actions workflow (ruff + pytest
+for the backend, typecheck/build for the frontend) is in [`ci/ci.yml`](ci/ci.yml)
+— see [`ci/README.md`](ci/README.md) for the one step to activate it (it's not
+under `.github/workflows/` yet because pushing workflow files needs a
+`workflow`-scoped token). Frontend formatting: `npx prettier` (config in
+`frontend/.prettierrc.json`).
+
+Runs are **reproducible**: a given `seed` fully determines a run (same seed +
+same policy ⇒ identical trajectory). All client inputs are clamped in
+`SimConfig.__post_init__` and the sweep endpoint, so no request can allocate an
+absurd tensor.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the module map and the
+non-obvious design decisions (slot pool, the MPS lock, food conservation), and
+`backend/antfarm/learning/` for the RL stubs that the next lessons fill in.
+
 ## The lessons
 
 | # | Title | What you learn |

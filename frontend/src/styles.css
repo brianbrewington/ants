@@ -102,6 +102,8 @@ input[type=range] { width: 100%; accent-color: var(--accent); height: 4px; }
 .abar-track { height: 8px; background: #0a0d18; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
 .abar-fill { height: 100%; border-radius: 6px; transition: width .2s ease; opacity: 0.85; }
 .abar-val { font-size: 11.5px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.abar { cursor: help; }
+.abar.inactive { opacity: 0.45; }
 
 .bifurcation {
   width: 100%; max-width: 680px; margin-top: 6px;

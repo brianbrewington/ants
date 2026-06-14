@@ -1,0 +1,4 @@
+# Dev / CI tooling (in addition to requirements.txt).
+#   ./.venv/bin/pip install -r requirements-dev.txt
+pytest~=9.1
+ruff~=0.15

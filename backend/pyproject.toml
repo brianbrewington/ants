@@ -1,0 +1,21 @@
+[project]
+name = "antfarm"
+version = "0.1.0"
+description = "Communicating Ants — vectorized multi-agent world + RL teaching project"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+# Tests import `antfarm` directly; put the backend dir on the path and force CPU
+# so the suite runs identically on a laptop and on CI (no GPU there).
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# E501: long lines are mostly in heavily-commented teaching code; not worth churn.
+ignore = ["E501"]

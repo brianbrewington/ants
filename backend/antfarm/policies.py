@@ -16,15 +16,15 @@ from __future__ import annotations
 
 import torch
 
-from .env import (AntWorld, EAT, BROADCAST, NOTHING, TELEPORT, LISTEN,
-                  RANDMOVE, REPRODUCE, N_ACTIONS)
+from .env import BROADCAST, EAT, LISTEN, N_ACTIONS, RANDMOVE, REPRODUCE, TELEPORT, AntWorld
 
 
 class RandomPolicy:
     name = "random"
 
     def __call__(self, env: AntWorld) -> torch.Tensor:
-        return torch.randint(0, N_ACTIONS, (env.cfg.n_worlds, env.n_slots), device=env.device)
+        return torch.randint(0, N_ACTIONS, (env.cfg.n_worlds, env.n_slots),
+                             device=env.device, generator=env.gen)
 
 
 class HeuristicPolicy:
@@ -44,7 +44,7 @@ class HeuristicPolicy:
         energy = obs["energy"]
 
         act = torch.full((B, S), RANDMOVE, device=dev, dtype=torch.long)
-        r = torch.rand(B, S, device=dev)
+        r = torch.rand(B, S, device=dev, generator=env.gen)
 
         # heard about food -> sometimes go there
         act = torch.where(heard_food & (r < self.p_teleport),
@@ -81,7 +81,7 @@ class ForagePolicy:
         act = torch.full((B, S), RANDMOVE, device=dev, dtype=torch.long)
         act = torch.where(on_food, torch.full_like(act, EAT), act)
         if env.cfg.ecosystem:
-            r = torch.rand(B, S, device=dev)
+            r = torch.rand(B, S, device=dev, generator=env.gen)
             full = energy >= env.cfg.birth_threshold * env.cfg.energy_max
             act = torch.where(full & (r < self.p_reproduce),
                               torch.full_like(act, REPRODUCE), act)

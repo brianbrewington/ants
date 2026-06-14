@@ -1,8 +1,9 @@
 """Correctness + speed smoke test.  Run:  ./.venv/bin/python -m tests.smoke"""
 import time
+
 import torch
 
-from antfarm import SimConfig, AntWorld, make_policy, bifurcation_sweep
+from antfarm import AntWorld, SimConfig, bifurcation_sweep, make_policy
 
 
 def check_homeostatic():

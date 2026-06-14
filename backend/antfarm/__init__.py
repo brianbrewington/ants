@@ -1,7 +1,7 @@
-from .config import SimConfig
-from .env import AntWorld, ACTION_NAMES, N_ACTIONS
-from .policies import make_policy, RandomPolicy, HeuristicPolicy, ForagePolicy
 from .bifurcation import bifurcation_sweep
+from .config import SimConfig
+from .env import ACTION_NAMES, N_ACTIONS, AntWorld
+from .policies import ForagePolicy, HeuristicPolicy, RandomPolicy, make_policy
 
 __all__ = [
     "SimConfig",
