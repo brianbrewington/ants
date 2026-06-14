@@ -3,8 +3,10 @@
 
 export interface Metrics {
   step: number;
+  population: number;
   food_eaten: number;
   deaths: number;
+  births: number;
   mean_energy: number;
   total_food: number;
   frac_eat: number;
@@ -33,8 +35,27 @@ export interface SimConfig {
   bite_size: number;
   move_radius: number;
   comm_radius: number;
+  // ecosystem (Lesson 0.5)
+  ecosystem: boolean;
+  max_ants: number;
+  food_growth_rate: number;
+  food_diffusion: number;
+  food_seed: number;
+  birth_threshold: number;
+  birth_cost: number;
+  enable_comm: boolean;
   seed: number;
   device: string;
+}
+
+export interface BifurcationData {
+  r: number[];
+  points: [number, number][];
+  min: number[];
+  max: number[];
+  mean: number[];
+  pop_ref: number;
+  n_slots: number;
 }
 
 export interface Frame {
@@ -52,6 +73,7 @@ export const ACTION = {
   TELEPORT: 3,
   LISTEN: 4,
   RANDMOVE: 5,
+  REPRODUCE: 6,
 } as const;
 
 // Colours echo the 1997 MATLAB legend.
@@ -62,4 +84,5 @@ export const ACTION_COLOR: Record<number, string> = {
   3: "#ff45e0", // teleport - magenta
   4: "#ffffff", // listen  - white
   5: "#c77dff", // randmove - violet
+  6: "#46ff7a", // reproduce - green
 };

@@ -47,6 +47,21 @@ class SimConfig:
     move_radius: float = 2.5      # how far a random move can travel
     comm_radius: float = 8.0      # broadcast/listen range (was MASKSIZE)
 
+    # --- ecosystem / population dynamics (Lesson 0.5) -------------------
+    # When ecosystem=False we are in the Lesson-0 "homeostatic" world: food
+    # refills to a target density and dead ants instantly respawn (population
+    # is pinned). When True the world becomes a coupled consumer-resource
+    # system: food grows logistically and the population is FREE to boom, bust,
+    # oscillate, or go extinct.
+    ecosystem: bool = False
+    max_ants: int = 1200          # slot capacity for births (tensor size in eco mode)
+    food_growth_rate: float = 1.9  # r -- logistic regrowth rate; THE bifurcation knob
+    food_diffusion: float = 0.08   # D -- how fast food spreads to neighbour cells
+    food_seed: float = 0.02        # spore-rain so grazed-out / extinct food can recover
+    birth_threshold: float = 0.80  # fraction of energy_max needed to reproduce
+    birth_cost: float = 0.45       # fraction of energy_max handed to each offspring
+    enable_comm: bool = True       # turn off the O(N^2) comm step (e.g. for sweeps)
+
     # --- simulation control ---------------------------------------------
     seed: int = 0
     device: str = "auto"          # "auto" -> mps if present else cpu

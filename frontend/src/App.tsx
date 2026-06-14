@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSim } from "./useSim";
 import { AntCanvas } from "./AntCanvas";
 import { Controls } from "./Controls";
 import { MetricsPanel } from "./Metrics";
+import { Bifurcation } from "./Bifurcation";
+import { HOMEOSTATIC_PRESET, ECOSYSTEM_PRESET } from "./presets";
 import type { SimConfig } from "./types";
 
 export default function App() {
@@ -37,6 +39,13 @@ export default function App() {
     }
   };
 
+  const onMode = (eco: boolean) => {
+    // Switching world model is structural -> reset with the matching preset.
+    const preset = eco ? ECOSYSTEM_PRESET : HOMEOSTATIC_PRESET;
+    setRunning(false);
+    send({ type: "reset", config: { ...config, ...preset } });
+  };
+
   const onSpeed = (n: number) => {
     setSpeed(n);
     send({ type: "speed", steps_per_frame: n, fps: 30 });
@@ -51,7 +60,11 @@ export default function App() {
           <span className="logo">🐜</span>
           <div>
             <h1>Communicating Ants</h1>
-            <div className="subtitle">Lesson 0 — The World · a vectorized, GPU-resident revival</div>
+            <div className="subtitle">
+              {config?.ecosystem
+                ? "Lesson 0.5 — A Living Ecosystem · renewable food, free population, bifurcations"
+                : "Lesson 0 — The World · a vectorized, GPU-resident revival"}
+            </div>
           </div>
         </div>
         <div className={"status " + (connected ? "ok" : "bad")}>
@@ -67,6 +80,7 @@ export default function App() {
           speed={speed}
           onStartPause={startPause}
           onReset={reset}
+          onMode={onMode}
           onPolicy={(name) => send({ type: "policy", name })}
           onSpeed={onSpeed}
           onConfig={onConfig}
@@ -74,16 +88,17 @@ export default function App() {
 
         <section className="stage">
           <AntCanvas snapshot={snapshot} />
-          <Legend />
+          <Legend ecosystem={!!config?.ecosystem} />
+          {config?.ecosystem && <Bifurcation />}
         </section>
 
-        <MetricsPanel history={history} />
+        <MetricsPanel history={history} ecosystem={!!config?.ecosystem} />
       </main>
     </div>
   );
 }
 
-function Legend() {
+function Legend({ ecosystem }: { ecosystem: boolean }) {
   const items: [string, string][] = [
     ["#ffe600", "eat / food"],
     ["#ff3344", "broadcast"],
@@ -91,7 +106,8 @@ function Legend() {
     ["#ff45e0", "teleport"],
     ["#c77dff", "move"],
     ["#3b6bff", "rest"],
-    ["#3cff8c", "comm link"],
+    ...(ecosystem ? ([["#46ff7a", "reproduce"]] as [string, string][])
+                  : ([["#3cff8c", "comm link"]] as [string, string][])),
   ];
   return (
     <div className="legend">

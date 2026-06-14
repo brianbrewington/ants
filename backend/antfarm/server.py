@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse
 from .config import SimConfig
 from .env import AntWorld
 from .policies import make_policy
+from .bifurcation import bifurcation_sweep
 
 app = FastAPI(title="Communicating Ants")
 app.add_middleware(
@@ -31,7 +32,17 @@ app.add_middleware(
 )
 
 # Params that can't change without re-allocating tensors -> require a reset.
-STRUCTURAL = {"world_size", "n_ants", "n_worlds", "device", "seed"}
+STRUCTURAL = {"world_size", "n_ants", "n_worlds", "device", "seed", "ecosystem", "max_ants"}
+
+# A known-good food/energy economy for the bifurcation sweep, used when the live
+# sim isn't currently in ecosystem mode (otherwise the sweep inherits homeostatic
+# food, which is so abundant the population just pegs at the slot cap for every r).
+# Mirrors frontend/src/presets.ts ECOSYSTEM_PRESET (minus structural fields).
+ECO_SWEEP_ECONOMY = {
+    "world_size": 48, "energy_max": 20.0, "energy_cost": 0.5, "bite_size": 3.0,
+    "max_food_size": 10.0, "food_density": 0.12, "food_diffusion": 0.015,
+    "food_seed": 0.0, "birth_threshold": 0.6, "birth_cost": 0.5,
+}
 
 
 class Simulation:
@@ -76,10 +87,37 @@ class Simulation:
 
 SIM = Simulation()
 
+# PyTorch's MPS (Metal) backend is NOT thread-safe: two threads issuing GPU ops
+# at once segfaults the Metal command stream. We therefore funnel ALL env/GPU
+# work through this single lock, so the live per-frame step and the bifurcation
+# sweep can never overlap. (Also why the sweep endpoint is async, not sync --
+# a sync handler would run in a worker thread.)
+SIM_LOCK = asyncio.Lock()
+
 
 @app.get("/api/config")
 def get_config():
     return JSONResponse({"config": SIM.cfg.to_dict(), "policy": SIM.policy.name})
+
+
+@app.get("/api/bifurcation")
+async def bifurcation(r_min: float = 0.3, r_max: float = 3.0, n_r: int = 200,
+                      transient: int = 400, sample: int = 240):
+    """Run the parallel-worlds sweep over food growth rate r.
+
+    Declared async and run directly on the event-loop thread *on purpose*: a sync
+    endpoint would be dispatched to a FastAPI worker thread, and PyTorch's MPS
+    backend must be driven from the thread that initialized it. The sweep is only
+    a few seconds, so briefly blocking the loop (pausing the live stream) is fine.
+    It inherits the current sim's food/energy knobs; the sweep raises the slot cap
+    internally so FOOD, not the cap, limits the population."""
+    base = SIM.cfg.to_dict()
+    if not base.get("ecosystem"):
+        base.update(ECO_SWEEP_ECONOMY)  # ensure a food-limited regime, not flat
+    async with SIM_LOCK:                  # never run GPU work alongside the live step
+        out = bifurcation_sweep(base, r_min=r_min, r_max=r_max,
+                                n_r=n_r, transient=transient, sample=sample)
+    return JSONResponse(out)
 
 
 async def _handle_control(ws: WebSocket, sim: Simulation):
@@ -106,9 +144,11 @@ async def _handle_control(ws: WebSocket, sim: Simulation):
 async def _stream_frames(ws: WebSocket, sim: Simulation):
     """Advance the sim and push snapshots at the target frame rate."""
     while True:
-        if sim.running:
-            sim.advance()
-        await ws.send_json({"type": "frame", "snapshot": sim.env.snapshot(),
+        async with SIM_LOCK:                 # serialize all GPU access (see SIM_LOCK)
+            if sim.running:
+                sim.advance()
+            snapshot = sim.env.snapshot()
+        await ws.send_json({"type": "frame", "snapshot": snapshot,
                             "policy": sim.policy.name, "config": sim.cfg.to_dict()})
         await asyncio.sleep(1.0 / max(1, sim.fps))
 

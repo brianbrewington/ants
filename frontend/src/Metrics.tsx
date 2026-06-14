@@ -34,7 +34,7 @@ function Spark({ data, color, label, fmt }: {
   );
 }
 
-export function MetricsPanel({ history }: { history: Metrics[] }) {
+export function MetricsPanel({ history, ecosystem }: { history: Metrics[]; ecosystem: boolean }) {
   const col = (k: keyof Metrics) => history.map((m) => m[k] as number);
   const m = history.length ? history[history.length - 1] : null;
 
@@ -50,10 +50,16 @@ export function MetricsPanel({ history }: { history: Metrics[] }) {
   return (
     <div className="metrics">
       <div className="sparks">
+        {ecosystem && (
+          <Spark data={col("population")} color="#9b8cff" label="Population (alive)"
+                 fmt={(v) => v.toFixed(0)} />
+        )}
         <Spark data={col("mean_energy")} color="#7CFFCB" label="Mean energy"
                fmt={(v) => v.toFixed(1)} />
-        <Spark data={col("food_eaten")} color="#ffe600" label="Food eaten / frame"
-               fmt={(v) => v.toFixed(1)} />
+        {ecosystem && (
+          <Spark data={col("births")} color="#46ff7a" label="Births / frame"
+                 fmt={(v) => v.toFixed(0)} />
+        )}
         <Spark data={col("deaths")} color="#ff5577" label="Deaths / frame"
                fmt={(v) => v.toFixed(0)} />
         <Spark data={col("total_food")} color="#ffb347" label="Food on grid"
